@@ -124,7 +124,7 @@ export async function GET(request: NextRequest) {
     });
 
     if (rpcError) {
-      return NextResponse.json({ success: false, rpcError }, { status: 200 });
+      return NextResponse.json({ success: false, rpcError }, { status: 500 });
     }
 
     return NextResponse.json({
@@ -137,7 +137,7 @@ export async function GET(request: NextRequest) {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     const stack = err instanceof Error ? err.stack : undefined;
-    return NextResponse.json({ success: false, error: message, stack }, { status: 200 });
+    return NextResponse.json({ success: false, error: message, stack }, { status: 500 });
   }
 }
 
