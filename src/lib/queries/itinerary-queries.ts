@@ -28,7 +28,7 @@ interface DbItineraryEvent {
   start_time: string;
   end_time: string;
   sort_order: number;
-  status: 'planned' | 'confirmed' | 'cancelled';
+  status: 'planned' | 'confirmed' | 'cancelled' | 'escalated';
   experience_providers?: DbExperienceProvider | null;
 }
 

@@ -51,6 +51,7 @@ const ar = {
     confirmed: 'مؤكد',
     planned: 'مخطط',
     cancelled: 'ملغي',
+    escalated: 'تم التصعيد',
     in_progress: 'قيد التنفيذ',
     completed: 'مكتمل',
   } as Record<string, string>,

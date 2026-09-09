@@ -39,7 +39,7 @@ export interface ItineraryEvent {
   startTime: string;
   endTime: string;
   sortOrder: number;
-  status: 'planned' | 'confirmed' | 'cancelled';
+  status: 'planned' | 'confirmed' | 'cancelled' | 'escalated';
   provider?: ExperienceProvider;
 }
 

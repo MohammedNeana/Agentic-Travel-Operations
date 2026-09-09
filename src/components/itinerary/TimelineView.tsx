@@ -1,6 +1,6 @@
 'use client';
 
-import { Clock, MapPin, CheckCircle2, Circle, XCircle } from 'lucide-react';
+import { Clock, MapPin, CheckCircle2, Circle, XCircle, AlertTriangle } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
 import ar from '@/lib/i18n/ar';
@@ -15,6 +15,7 @@ const statusConfig: Record<string, { icon: typeof CheckCircle2; variant: 'succes
   confirmed: { icon: CheckCircle2, variant: 'success' },
   planned: { icon: Circle, variant: 'warning' },
   cancelled: { icon: XCircle, variant: 'danger' },
+  escalated: { icon: AlertTriangle, variant: 'danger' },
 };
 
 export function TimelineView({ events, isLoading = false }: TimelineViewProps) {
