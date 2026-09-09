@@ -4,6 +4,7 @@ import { Clock, MapPin, CheckCircle2, Circle, XCircle, AlertTriangle } from 'luc
 import { Badge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
 import ar from '@/lib/i18n/ar';
+import { formatArabicDateHeading } from '@/lib/i18n/date';
 import type { ItineraryEvent } from '@/types/itinerary';
 
 interface TimelineViewProps {
@@ -52,8 +53,11 @@ export function TimelineView({ events, isLoading = false }: TimelineViewProps) {
           {/* Date Header */}
           <div className="mb-3.5 flex items-center gap-3">
             <div className="h-px flex-1 bg-gray-200" />
-            <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 bg-gray-50 px-3 py-1 rounded-full border border-gray-100">
-              {formatDateHeadingAr(date)}
+            <span
+              className="text-[11px] font-bold uppercase tracking-wider text-gray-500 bg-gray-50 px-3 py-1 rounded-full border border-gray-100"
+              suppressHydrationWarning
+            >
+              {formatArabicDateHeading(date)}
             </span>
             <div className="h-px flex-1 bg-gray-200" />
           </div>
@@ -133,7 +137,7 @@ function EventCard({ event }: { event: ItineraryEvent }) {
       {event.provider && (
         <div className="mt-3.5 flex items-center gap-2 rounded-lg bg-gray-50/80 px-3 py-2 border border-gray-100">
           <div className="h-6 w-6 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-600">
-            {event.provider.name.charAt(0)}
+            <span suppressHydrationWarning>{event.provider.name.charAt(0)}</span>
           </div>
           <span className="text-xs font-semibold text-gray-700">{event.provider.name}</span>
           {event.provider.verificationStatus === 'verified' && (
@@ -176,16 +180,4 @@ function groupByDate(events: ItineraryEvent[]): Record<string, ItineraryEvent[]>
     acc[date].push(event);
     return acc;
   }, {});
-}
-
-function formatDateHeadingAr(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString('ar-SA', {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-    });
-  } catch {
-    return iso;
-  }
 }

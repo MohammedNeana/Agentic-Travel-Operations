@@ -23,6 +23,7 @@ export default function RootLayout({
       lang="ar"
       dir="rtl"
       className={`${ibmArabic.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col font-sans" suppressHydrationWarning>
         {children}

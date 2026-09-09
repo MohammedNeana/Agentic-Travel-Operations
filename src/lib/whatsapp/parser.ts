@@ -39,8 +39,8 @@ export function verifyWebhookSignature(
   signatureHeader: string | null,
   appSecret = process.env.WHATSAPP_APP_SECRET
 ): boolean {
-  if (!appSecret) {
-    // If no secret configured in environment, skip signature verification in dev
+  if (!appSecret || appSecret === 'your_whatsapp_app_secret_here' || appSecret.trim() === '') {
+    // If no secret or placeholder configured in environment, skip signature verification in dev
     return true;
   }
 

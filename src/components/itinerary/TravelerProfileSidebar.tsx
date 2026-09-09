@@ -4,6 +4,7 @@ import { User, Globe, Wallet, Users, Utensils, Calendar, Accessibility } from 'l
 import { Badge } from '@/components/ui/Badge';
 import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
 import ar from '@/lib/i18n/ar';
+import { formatArabicDate } from '@/lib/i18n/date';
 import type { TravelerProfile } from '@/types/itinerary';
 
 export const defaultArabicTravelerProfile: TravelerProfile = {
@@ -84,7 +85,7 @@ export function TravelerProfileSidebar({
         <DetailRow
           icon={<Calendar className="h-4 w-4 text-gray-400" />}
           label={ar.sidebar.dates}
-          value={`${formatDateAr(activeProfile.arrivalDate)} ← ${formatDateAr(activeProfile.departureDate)}`}
+          value={`${formatArabicDate(activeProfile.arrivalDate)} ← ${formatArabicDate(activeProfile.departureDate)}`}
         />
       </div>
 
@@ -180,14 +181,4 @@ function SidebarSkeleton() {
       </div>
     </aside>
   );
-}
-
-// ─── Helpers ─────────────────────────────────────────────────
-
-function formatDateAr(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString('ar-SA', { month: 'short', day: 'numeric' });
-  } catch {
-    return iso;
-  }
 }

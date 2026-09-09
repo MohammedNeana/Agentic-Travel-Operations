@@ -109,15 +109,6 @@ export async function downloadWhatsAppAudio(
 export async function fetchAndDownloadWhatsAppAudio(
   mediaId: string
 ): Promise<RetrievedAudioMedia> {
-  // Support local test simulation with mock media IDs
-  if (mediaId.startsWith('mock-')) {
-    return {
-      buffer: Buffer.from(`mock-voice-content:${mediaId}`),
-      mimeType: 'audio/ogg',
-      fileName: `${mediaId}.ogg`,
-    };
-  }
-
   const { url, mimeType } = await getWhatsAppMediaUrl(mediaId);
   return downloadWhatsAppAudio(url, mimeType);
 }

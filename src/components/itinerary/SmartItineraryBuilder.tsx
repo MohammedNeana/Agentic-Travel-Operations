@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { TravelerProfileSidebar, defaultArabicTravelerProfile } from '@/components/itinerary/TravelerProfileSidebar';
 import { TimelineView } from '@/components/itinerary/TimelineView';
 import { SmartMatchPanel } from '@/components/itinerary/SmartMatchPanel';
 import { WarningSection } from '@/components/itinerary/WarningSection';
 import ar from '@/lib/i18n/ar';
+import { formatArabicDateRange } from '@/lib/i18n/date';
 import type {
   TravelerProfile,
   Itinerary,
@@ -28,10 +29,26 @@ export function SmartItineraryBuilder({
   initialProfile = defaultArabicTravelerProfile,
   isLoading = false,
 }: SmartItineraryBuilderProps) {
+  const [isMounted, setIsMounted] = useState(false);
   const [profile] = useState<TravelerProfile | null>(initialProfile);
   const [itinerary] = useState<Itinerary | null>(initialItinerary ?? null);
   const [recommendations] = useState<SmartMatchRecommendation[]>(initialRecommendations);
   const [warnings] = useState<ScheduleWarning[]>(initialWarnings);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  if (!isMounted) {
+    return (
+      <div className="min-h-screen bg-gray-50/50 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-900 border-t-transparent" />
+          <p className="text-xs font-semibold text-gray-500">جارٍ التحميل...</p>
+        </div>
+      </div>
+    );
+  }
 
   const activeItinerary = itinerary;
   const events = activeItinerary?.events ?? [];
@@ -52,11 +69,11 @@ export function SmartItineraryBuilder({
                 </span>
               )}
             </div>
-            <p className="mt-0.5 text-xs text-gray-500 font-medium">
+            <p className="mt-0.5 text-xs text-gray-500 font-medium" suppressHydrationWarning>
               {activeItinerary
-                ? `${activeItinerary.title} · ${formatDateRangeAr(activeItinerary.startDate, activeItinerary.endDate)}`
+                ? `${activeItinerary.title} · ${formatArabicDateRange(activeItinerary.startDate, activeItinerary.endDate)}`
                 : profile
-                  ? `${profile.name} · ${formatDateRangeAr(profile.arrivalDate, profile.departureDate)}`
+                  ? `${profile.name} · ${formatArabicDateRange(profile.arrivalDate, profile.departureDate)}`
                   : ar.header.loadingTraveler}
             </p>
           </div>
@@ -87,17 +104,4 @@ export function SmartItineraryBuilder({
       </main>
     </div>
   );
-}
-
-// ─── Helpers ─────────────────────────────────────────────────
-
-function formatDateRangeAr(start: string, end: string): string {
-  try {
-    const s = new Date(start);
-    const e = new Date(end);
-    const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
-    return `${s.toLocaleDateString('ar-SA', opts)} – ${e.toLocaleDateString('ar-SA', { ...opts, year: 'numeric' })}`;
-  } catch {
-    return `${start} – ${end}`;
-  }
 }
