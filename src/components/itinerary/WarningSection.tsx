@@ -4,10 +4,10 @@ import type { ScheduleWarning } from '@/types/itinerary';
 
 interface WarningSectionProps {
   warnings: ScheduleWarning[];
-  isLoading: boolean;
+  isLoading?: boolean;
 }
 
-export function WarningSection({ warnings, isLoading }: WarningSectionProps) {
+export function WarningSection({ warnings, isLoading = false }: WarningSectionProps) {
   if (isLoading) {
     return (
       <div className="space-y-2">
@@ -21,7 +21,7 @@ export function WarningSection({ warnings, isLoading }: WarningSectionProps) {
   if (warnings.length === 0) return null;
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2.5">
       {warnings.map((warning) => (
         <WarningBanner
           key={warning.id}
