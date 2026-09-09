@@ -22,6 +22,8 @@ export const defaultArabicTravelerProfile: TravelerProfile = {
 
 interface TravelerProfileSidebarProps {
   profile?: TravelerProfile | null;
+  travelers?: TravelerProfile[];
+  onSelectTraveler?: (traveler: TravelerProfile) => void;
   isLoading?: boolean;
 }
 
@@ -34,6 +36,8 @@ const budgetColors: Record<string, 'neutral' | 'default' | 'warning' | 'success'
 
 export function TravelerProfileSidebar({
   profile = defaultArabicTravelerProfile,
+  travelers = [],
+  onSelectTraveler,
   isLoading = false,
 }: TravelerProfileSidebarProps) {
   if (isLoading) {
@@ -44,11 +48,41 @@ export function TravelerProfileSidebar({
 
   return (
     <aside className="w-80 shrink-0 space-y-6 rounded-2xl border border-gray-100 bg-white p-6 shadow-xs">
-      {/* Header */}
+      {/* Header & Traveler Switcher */}
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-          {ar.sidebar.title}
-        </p>
+        <div className="flex items-center justify-between">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+            {ar.sidebar.title}
+          </p>
+          {travelers.length > 1 && (
+            <span className="rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">
+              {travelers.length} مسافرين
+            </span>
+          )}
+        </div>
+
+        {travelers.length > 1 && (
+          <div className="mt-2.5">
+            <select
+              aria-label="اختر ملف المسافر"
+              value={activeProfile.id}
+              onChange={(e) => {
+                const selected = travelers.find((t) => t.id === e.target.value);
+                if (selected && onSelectTraveler) {
+                  onSelectTraveler(selected);
+                }
+              }}
+              className="w-full rounded-xl border border-gray-200 bg-gray-50/80 px-3 py-2 text-xs font-semibold text-gray-800 transition focus:border-gray-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-gray-900"
+            >
+              {travelers.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} — {t.nationality}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <div className="mt-3 flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gray-900 text-white shadow-xs">
             <User className="h-5 w-5" />

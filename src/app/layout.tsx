@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans_Arabic } from "next/font/google";
 import "./globals.css";
+import { AppNavbar } from "@/components/layout/AppNavbar";
+import { AuthGuard } from "@/components/layout/AuthGuard";
 
 const ibmArabic = IBM_Plex_Sans_Arabic({
   variable: "--font-ibm-arabic",
@@ -9,8 +11,8 @@ const ibmArabic = IBM_Plex_Sans_Arabic({
 });
 
 export const metadata: Metadata = {
-  title: "There DMC — أداة بناء الرحلات الذكية",
-  description: "أداة بناء رحلات مدعومة بالذكاء الاصطناعي لشركات إدارة الوجهات السياحية السعودية",
+  title: "There DMC — منصة إدارة الوجهات السياحية",
+  description: "أداة بناء رحلات ومحرك استكشاف مزودين مدعوم بالذكاء الاصطناعي لشركات إدارة الوجهات السياحية السعودية",
 };
 
 export default function RootLayout({
@@ -25,8 +27,11 @@ export default function RootLayout({
       className={`${ibmArabic.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col font-sans" suppressHydrationWarning>
-        {children}
+      <body className="min-h-full flex flex-col font-sans bg-gray-50/40" suppressHydrationWarning>
+        <AuthGuard>
+          <AppNavbar />
+          {children}
+        </AuthGuard>
       </body>
     </html>
   );

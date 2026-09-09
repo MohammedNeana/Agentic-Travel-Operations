@@ -9,22 +9,45 @@ import type { SmartMatchRecommendation } from '@/types/itinerary';
 interface SmartMatchPanelProps {
   recommendations: SmartMatchRecommendation[];
   isLoading?: boolean;
+  isMatching?: boolean;
+  onReMatch?: () => void;
 }
 
-export function SmartMatchPanel({ recommendations, isLoading = false }: SmartMatchPanelProps) {
+export function SmartMatchPanel({
+  recommendations,
+  isLoading = false,
+  isMatching = false,
+  onReMatch,
+}: SmartMatchPanelProps) {
   return (
     <div className="w-80 shrink-0 space-y-4">
       {/* Header */}
-      <div className="flex items-center gap-2">
-        <Sparkles className="h-4 w-4 text-violet-600" />
-        <h2 className="text-sm font-bold text-gray-900">{ar.smartMatch.title}</h2>
-        <span className="ms-auto text-[11px] font-medium text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
-          {ar.smartMatch.subtitle}
-        </span>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-violet-600" />
+          <h2 className="text-sm font-bold text-gray-900">{ar.smartMatch.title}</h2>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          {onReMatch && (
+            <button
+              type="button"
+              onClick={onReMatch}
+              disabled={isMatching || isLoading}
+              className="text-[10px] font-bold text-violet-700 bg-violet-50 hover:bg-violet-100 border border-violet-200 px-2 py-0.5 rounded-md transition-colors cursor-pointer disabled:opacity-50"
+              title="إعادة المطابقة الشعاعية باستخدام pgvector"
+            >
+              {isMatching ? 'جارٍ المطابقة...' : 'مطابقة ذكية'}
+            </button>
+          )}
+          <span className="text-[11px] font-medium text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+            {ar.smartMatch.subtitle}
+          </span>
+        </div>
       </div>
 
       {/* Cards */}
-      {isLoading ? (
+      {isLoading || isMatching ? (
         <div className="space-y-3">
           {Array.from({ length: 3 }).map((_, i) => (
             <SkeletonCard key={i} />

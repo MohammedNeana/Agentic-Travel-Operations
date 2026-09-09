@@ -2,10 +2,11 @@
 
 export interface TravelerProfile {
   id: string;
+  tenantId?: string;
   name: string;
   nationality: string;
   groupSize: number;
-  budgetTier: 'economy' | 'standard' | 'premium' | 'luxury';
+  budgetTier: 'economy' | 'standard' | 'premium' | 'luxury' | string;
   interests: string[];
   dietaryRestrictions: string[];
   mobilityNotes: string;

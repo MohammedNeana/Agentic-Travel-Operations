@@ -14,14 +14,14 @@ interface GroqChatCompletionResponse {
 }
 
 /**
- * Classifies transcribed voice note intent using Groq's OpenAI-compatible Chat API
- * running `llama-3.1-70b-versatile`.
+ * Classifies transcribed voice note intent using Groq's OpenAI-compatible Chat API.
+ * Uses Groq's active production models (openai/gpt-oss-120b, openai/gpt-oss-20b, qwen/qwen3.6-27b).
  * Base URL: https://api.groq.com/openai/v1
  */
 export async function classifyVoiceIntent(
   transcriptionText: string,
   apiKey = process.env.GROQ_API_KEY,
-  model = process.env.GROQ_LLM_MODEL || 'llama-3.1-70b-versatile'
+  model = process.env.GROQ_LLM_MODEL || 'openai/gpt-oss-120b'
 ): Promise<IntentClassificationResult> {
   if (!transcriptionText || transcriptionText.trim().length === 0) {
     throw new Error('Cannot classify intent: Transcribed voice note text is empty.');
@@ -47,55 +47,88 @@ Respond ONLY with valid JSON in this exact structure:
   "suggestedAction": "Suggested action in Arabic for the DMC operations dashboard"
 }`;
 
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Transcribed Arabic Voice Message:\n"${transcriptionText}"` },
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.1,
-    }),
-  });
+  // Candidate models to try in sequence if a specific model was deprecated or not accessible on this key
+  const candidateModels = process.env.GROQ_LLM_MODEL
+    ? [process.env.GROQ_LLM_MODEL]
+    : [model, 'openai/gpt-oss-20b', 'qwen/qwen3.6-27b'];
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `Groq Chat Completion API (${model}) failed [HTTP ${response.status}]: ${errorText}`
-    );
+  let lastError: Error | null = null;
+
+  for (const currentModel of candidateModels) {
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: currentModel,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `Transcribed Arabic Voice Message:\n"${transcriptionText}"` },
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.1,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        const err = new Error(
+          `Groq Chat Completion API (${currentModel}) failed [HTTP ${response.status}]: ${errorText}`
+        );
+        // If it's a 404 / model deprecated error, try the next model candidate
+        if (response.status === 404 || response.status === 400) {
+          lastError = err;
+          console.warn(`Groq model ${currentModel} returned HTTP ${response.status}, trying next available model...`);
+          continue;
+        }
+        throw err;
+      }
+
+      const data = (await response.json()) as GroqChatCompletionResponse;
+      const content = data.choices?.[0]?.message?.content;
+
+      if (!content) {
+        throw new Error(`Groq LLM (${currentModel}) returned an empty response content.`);
+      }
+
+      // Handle potential markdown code fences: ```json ... ```
+      const cleaned = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+      const parsed = JSON.parse(cleaned) as {
+        category?: string;
+        confidence?: number;
+        reason?: string;
+        suggestedAction?: string;
+      };
+
+      let category: IntentCategory = 'General';
+      if (parsed.category === 'Emergency') category = 'Emergency';
+      else if (parsed.category === 'Delay') category = 'Delay';
+
+      const isEscalationRequired = category === 'Emergency' || category === 'Delay';
+
+      console.log(`[Groq Intent] Successfully classified voice note with ${currentModel}:`, {
+        category,
+        isEscalationRequired,
+      });
+
+      return {
+        category,
+        confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.95,
+        reason: parsed.reason || '',
+        suggestedAction: parsed.suggestedAction || '',
+        isEscalationRequired,
+      };
+    } catch (err: unknown) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      // If it's not a model error, propagate immediately
+      if (!lastError.message.includes('HTTP 404') && !lastError.message.includes('HTTP 400')) {
+        throw lastError;
+      }
+    }
   }
 
-  const data = (await response.json()) as GroqChatCompletionResponse;
-  const content = data.choices?.[0]?.message?.content;
-
-  if (!content) {
-    throw new Error('Groq LLM returned an empty response content.');
-  }
-
-  const parsed = JSON.parse(content) as {
-    category?: string;
-    confidence?: number;
-    reason?: string;
-    suggestedAction?: string;
-  };
-
-  let category: IntentCategory = 'General';
-  if (parsed.category === 'Emergency') category = 'Emergency';
-  else if (parsed.category === 'Delay') category = 'Delay';
-
-  const isEscalationRequired = category === 'Emergency' || category === 'Delay';
-
-  return {
-    category,
-    confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.95,
-    reason: parsed.reason || '',
-    suggestedAction: parsed.suggestedAction || '',
-    isEscalationRequired,
-  };
+  throw lastError || new Error('Failed to classify voice intent with available Groq models.');
 }

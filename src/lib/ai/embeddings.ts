@@ -1,90 +1,62 @@
 import type { ExtractedExperienceProvider } from './extraction';
 
+type FeatureExtractor = (
+  text: string | string[],
+  options?: { pooling?: 'none' | 'mean' | 'cls'; normalize?: boolean }
+) => Promise<{ data: Float32Array }>;
+
+let extractorInstance: FeatureExtractor | null = null;
+let extractorPromise: Promise<FeatureExtractor> | null = null;
+
 /**
- * Generates a deterministic normalized 1536-dimensional pseudo-vector
- * used as a local fallback when OpenAI API key is unavailable.
+ * Returns a singleton feature-extraction pipeline using Xenova/all-MiniLM-L6-v2.
+ * Initializes once on the server and is reused across all requests.
  */
-function generateDeterministicEmbedding(text: string): number[] {
-  const dimensions = 1536;
-  const vector: number[] = new Array(dimensions).fill(0);
-
-  let hash = 0;
-  for (let i = 0; i < text.length; i++) {
-    hash = (hash << 5) - hash + text.charCodeAt(i);
-    hash |= 0;
+async function getExtractor(): Promise<FeatureExtractor> {
+  if (extractorInstance) {
+    return extractorInstance;
+  }
+  if (extractorPromise) {
+    return extractorPromise;
   }
 
-  let norm = 0;
-  for (let i = 0; i < dimensions; i++) {
-    // Generate pseudo-random value seeded with hash and dimension index
-    const seed = (hash + i * 2654435761) >>> 0;
-    const val = (seed % 2000 - 1000) / 1000;
-    vector[i] = val;
-    norm += val * val;
-  }
+  extractorPromise = (async () => {
+    const { pipeline, env } = await import('@xenova/transformers');
+    // Allow remote model downloading from Hugging Face cache
+    env.allowLocalModels = false;
 
-  // Normalize vector to unit length
-  const sqrtNorm = Math.sqrt(norm) || 1;
-  for (let i = 0; i < dimensions; i++) {
-    vector[i] = Number((vector[i] / sqrtNorm).toFixed(6));
-  }
+    const pipelineInstance = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+    extractorInstance = pipelineInstance as unknown as FeatureExtractor;
+    return extractorInstance;
+  })();
 
-  return vector;
+  return extractorPromise;
 }
 
 /**
- * Generates a 1536-dimensional vector embedding for a Saudi experience provider profile
- * using OpenAI's `text-embedding-3-small` model.
+ * Generates a real 384-dimensional dense vector embedding for arbitrary input text
+ * locally using @xenova/transformers ('Xenova/all-MiniLM-L6-v2').
+ * 100% free, 0 paid APIs, 0 mock data.
+ */
+export async function generateTextEmbedding(
+  text: string,
+  _apiKey?: string
+): Promise<number[]> {
+  const cleanText = text && text.trim().length > 0 ? text.trim() : 'تجربة سياحية سعودية أصيلة';
+  const extractor = await getExtractor();
+  const output = await extractor(cleanText, { pooling: 'mean', normalize: true });
+  return Array.from(output.data);
+}
+
+/**
+ * Generates a real 384-dimensional dense vector embedding for a Saudi experience provider profile
+ * locally using @xenova/transformers ('Xenova/all-MiniLM-L6-v2').
  */
 export async function generateProviderEmbedding(
   provider: ExtractedExperienceProvider,
-  apiKey = process.env.OPENAI_API_KEY
+  _apiKey?: string
 ): Promise<number[]> {
-  // Combine name, city, and experience type into a rich semantic representation
   const inputSemanticText = `${provider.name} | ${provider.city} | ${provider.experience_type} (سعة: ${provider.capacity} ضيوف)`;
-
-  if (!apiKey) {
-    console.warn(
-      'OPENAI_API_KEY is not configured in environment. Using deterministic 1536-dimensional fallback vector.'
-    );
-    return generateDeterministicEmbedding(inputSemanticText);
-  }
-
-  try {
-    const response = await fetch('https://api.openai.com/v1/embeddings', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'text-embedding-3-small',
-        input: inputSemanticText,
-        dimensions: 1536,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(
-        `OpenAI embeddings API error (${response.status}): ${errorText}. Using fallback embedding vector.`
-      );
-      return generateDeterministicEmbedding(inputSemanticText);
-    }
-
-    const data = await response.json();
-    const embedding = data.data?.[0]?.embedding;
-
-    if (!Array.isArray(embedding) || embedding.length !== 1536) {
-      console.warn(
-        `Unexpected embedding dimensions returned (${embedding?.length ?? 0}). Expected 1536.`
-      );
-      return generateDeterministicEmbedding(inputSemanticText);
-    }
-
-    return embedding as number[];
-  } catch (err) {
-    console.error('Failed to generate vector embedding via OpenAI, using fallback:', err);
-    return generateDeterministicEmbedding(inputSemanticText);
-  }
+  return generateTextEmbedding(inputSemanticText);
 }
+

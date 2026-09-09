@@ -19,6 +19,7 @@ interface SmartItineraryBuilderProps {
   initialRecommendations?: SmartMatchRecommendation[];
   initialWarnings?: ScheduleWarning[];
   initialProfile?: TravelerProfile | null;
+  initialTravelers?: TravelerProfile[];
   isLoading?: boolean;
 }
 
@@ -27,17 +28,65 @@ export function SmartItineraryBuilder({
   initialRecommendations = [],
   initialWarnings = [],
   initialProfile = defaultArabicTravelerProfile,
+  initialTravelers = [],
   isLoading = false,
 }: SmartItineraryBuilderProps) {
   const [isMounted, setIsMounted] = useState(false);
-  const [profile] = useState<TravelerProfile | null>(initialProfile);
+  const [profile, setProfile] = useState<TravelerProfile | null>(initialProfile);
+  const [travelers] = useState<TravelerProfile[]>(initialTravelers);
   const [itinerary] = useState<Itinerary | null>(initialItinerary ?? null);
-  const [recommendations] = useState<SmartMatchRecommendation[]>(initialRecommendations);
+  const [recommendations, setRecommendations] = useState<SmartMatchRecommendation[]>(initialRecommendations);
   const [warnings] = useState<ScheduleWarning[]>(initialWarnings);
+  const [isReMatching, setIsReMatching] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  const handleSelectTraveler = async (newProfile: TravelerProfile) => {
+    setProfile(newProfile);
+    setIsReMatching(true);
+    try {
+      const res = await fetch('/api/providers/match', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          interests: newProfile.interests,
+          tenant_id: newProfile.tenantId || itinerary?.tenantId || 'a1b2c3d4-0001-4000-8000-000000000001',
+        }),
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.recommendations)) {
+        setRecommendations(data.recommendations);
+      }
+    } catch (err) {
+      console.error('Failed to rematch providers for selected traveler:', err);
+    } finally {
+      setIsReMatching(false);
+    }
+  };
+
+  const handleReMatch = async () => {
+    setIsReMatching(true);
+    try {
+      const res = await fetch('/api/providers/match', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          interests: profile?.interests,
+          tenant_id: profile?.tenantId || itinerary?.tenantId || 'a1b2c3d4-0001-4000-8000-000000000001',
+        }),
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.recommendations)) {
+        setRecommendations(data.recommendations);
+      }
+    } catch (err) {
+      console.error('Failed to rematch providers:', err);
+    } finally {
+      setIsReMatching(false);
+    }
+  };
 
   if (!isMounted) {
     return (
@@ -56,7 +105,7 @@ export function SmartItineraryBuilder({
   return (
     <div className="min-h-screen bg-gray-50/50">
       {/* Top Bar */}
-      <header className="sticky top-0 z-20 border-b border-gray-100 bg-white/90 backdrop-blur-md">
+      <header className="sticky top-[57px] z-20 border-b border-gray-100 bg-white/90 backdrop-blur-md">
         <div className="mx-auto flex max-w-screen-2xl items-center justify-between px-6 py-4">
           <div>
             <div className="flex items-center gap-3">
@@ -98,9 +147,19 @@ export function SmartItineraryBuilder({
 
       {/* Main Layout: Sidebar | Timeline | SmartMatch */}
       <main className="mx-auto flex max-w-screen-2xl gap-6 px-6 py-6 items-start">
-        <TravelerProfileSidebar profile={profile} isLoading={isLoading} />
+        <TravelerProfileSidebar
+          profile={profile}
+          travelers={travelers}
+          onSelectTraveler={handleSelectTraveler}
+          isLoading={isLoading}
+        />
         <TimelineView events={events} isLoading={isLoading} />
-        <SmartMatchPanel recommendations={recommendations} isLoading={isLoading} />
+        <SmartMatchPanel
+          recommendations={recommendations}
+          isLoading={isLoading}
+          isMatching={isReMatching}
+          onReMatch={handleReMatch}
+        />
       </main>
     </div>
   );
