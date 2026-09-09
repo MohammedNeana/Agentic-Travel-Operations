@@ -22,8 +22,24 @@ async function getExtractor(): Promise<FeatureExtractor> {
 
   extractorPromise = (async () => {
     const { pipeline, env } = await import('@xenova/transformers');
-    // Allow remote model downloading from Hugging Face cache
+    const path = await import('path');
+    env.cacheDir = path.join(process.cwd(), 'node_modules/@xenova/transformers/.cache');
     env.allowLocalModels = false;
+
+    // Ensure wasm runs in single-thread mode without worker threads in Node.js
+    try {
+      const ortWeb = await import('onnxruntime-web');
+      if (ortWeb?.env?.wasm) {
+        ortWeb.env.wasm.numThreads = 1;
+      }
+    } catch {
+      // Ignore if not loaded
+    }
+
+    if (env.backends?.onnx?.wasm) {
+      env.backends.onnx.wasm.numThreads = 1;
+      env.backends.onnx.wasm.proxy = false;
+    }
 
     const pipelineInstance = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
     extractorInstance = pipelineInstance as unknown as FeatureExtractor;
