@@ -41,6 +41,7 @@ export interface ItineraryEvent {
   endTime: string;
   sortOrder: number;
   status: 'planned' | 'confirmed' | 'cancelled' | 'escalated';
+  escalationReason?: string;
   provider?: ExperienceProvider;
 }
 
@@ -64,6 +65,7 @@ export interface ScheduleWarning {
   severity: WarningSeverity;
   title: string;
   message: string;
+  detail?: string;
   relatedEventIds?: string[];
 }
 

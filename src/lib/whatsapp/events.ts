@@ -161,11 +161,13 @@ export async function escalateItineraryEvent(options?: {
     };
   }
 
-  // Update status to 'escalated'
+  // Update status to 'escalated' and store the voice transcription / reason
+  const reasonText = options?.transcriptionText || options?.reason || 'بلاغ صوتي عاجل عبر واتساب';
   const { error: updateErr } = await supabase
     .from('itinerary_events')
     .update({
       status: 'escalated',
+      escalation_reason: reasonText,
       updated_at: new Date().toISOString(),
     })
     .eq('id', targetEventId);

@@ -15,6 +15,7 @@ interface SaveEventPayload {
   endTime: string;
   sortOrder: number;
   status: 'planned' | 'confirmed' | 'cancelled' | 'escalated';
+  escalationReason?: string | null;
 }
 
 export async function POST(req: NextRequest) {
@@ -91,6 +92,7 @@ export async function POST(req: NextRequest) {
           end_time: end,
           sort_order: ev.sortOrder || index + 1,
           status: ev.status || 'planned',
+          escalation_reason: ev.escalationReason || null,
           updated_at: new Date().toISOString(),
         };
       });

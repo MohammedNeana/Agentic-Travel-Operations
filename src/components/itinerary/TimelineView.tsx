@@ -172,6 +172,16 @@ function EventCard({
           )}
         </div>
       )}
+
+      {event.status === 'escalated' && event.escalationReason && (
+        <div className="mt-3 flex items-start gap-2 rounded-lg bg-red-50 p-2.5 border border-red-200/80">
+          <AlertTriangle className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
+          <div className="text-xs">
+            <span className="font-bold text-red-900">بلاغ التأخير/الطارئ: </span>
+            <span className="font-medium text-red-800 italic">"{event.escalationReason}"</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

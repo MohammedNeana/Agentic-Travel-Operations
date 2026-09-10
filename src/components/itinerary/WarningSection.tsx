@@ -28,6 +28,7 @@ export function WarningSection({ warnings, isLoading = false }: WarningSectionPr
           severity={warning.severity}
           title={warning.title}
           message={warning.message}
+          detail={warning.detail}
         />
       ))}
     </div>

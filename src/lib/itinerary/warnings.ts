@@ -38,11 +38,13 @@ export function detectScheduleWarnings(
   // 2. Operational Escalation Warning: Triggered when an event is escalated (e.g. from WhatsApp voice note)
   for (const ev of events) {
     if (ev.status === 'escalated') {
+      const reasonText = ev.escalationReason || 'تأخير في الموعد أو طارئ يتطلب تدخل فريق العمليات';
       warnings.push({
         id: `escalated-${ev.id}`,
         severity: 'error',
-        title: 'تنبيه تصعيد تشغيلي عاجل (واتساب)',
-        message: `تم تصعيد فعالية "${ev.title}" بعد تلقي بلاغ صوتي عاجل يفيد بتأخير أو طارئ يتطلب تدخل فريق العمليات.`,
+        title: `تنبيه تصعيد تشغيلي عاجل (واتساب) — ${ev.title}`,
+        message: `تم استلام بلاغ صوتي عاجل من المزود/المرشد بشأن هذه الفعالية (${ev.eventDate} | ${ev.startTime}–${ev.endTime}).`,
+        detail: reasonText,
         relatedEventIds: [ev.id],
       });
     }

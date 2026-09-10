@@ -31,6 +31,7 @@ interface DbItineraryEvent {
   end_time: string;
   sort_order: number;
   status: 'planned' | 'confirmed' | 'cancelled' | 'escalated';
+  escalation_reason?: string | null;
   experience_providers?: DbExperienceProvider | null;
 }
 
@@ -144,6 +145,7 @@ export async function getActiveItinerary(travelerId?: string): Promise<Itinerary
     endTime: ev.end_time ? ev.end_time.substring(0, 5) : '',
     sortOrder: ev.sort_order,
     status: ev.status,
+    escalationReason: ev.escalation_reason ?? undefined,
     provider: ev.experience_providers ? mapProvider(ev.experience_providers) : undefined,
   }));
 

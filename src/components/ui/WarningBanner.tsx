@@ -5,6 +5,7 @@ interface WarningBannerProps {
   severity: WarningSeverity;
   title: string;
   message: string;
+  detail?: string;
 }
 
 const severityConfig: Record<
@@ -34,7 +35,7 @@ const severityConfig: Record<
   },
 };
 
-export function WarningBanner({ severity, title, message }: WarningBannerProps) {
+export function WarningBanner({ severity, title, message, detail }: WarningBannerProps) {
   const config = severityConfig[severity];
   const Icon = config.icon;
 
@@ -44,11 +45,19 @@ export function WarningBanner({ severity, title, message }: WarningBannerProps) 
       role="alert"
     >
       <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${config.iconColor}`} />
-      <div className="min-w-0">
-        <p className={`text-sm font-semibold ${config.text}`}>{title}</p>
-        <p className={`mt-0.5 text-sm leading-relaxed ${config.text} opacity-80`}>
+      <div className="min-w-0 flex-1">
+        <p className={`text-sm font-bold ${config.text}`}>{title}</p>
+        <p className={`mt-0.5 text-xs sm:text-sm leading-relaxed ${config.text} opacity-90`}>
           {message}
         </p>
+        {detail && (
+          <div className="mt-2.5 flex items-start gap-2 rounded-lg bg-white/80 p-2.5 border border-red-200/70 shadow-2xs">
+            <span className="text-xs font-bold text-red-900 shrink-0">سبب التصعيد / نص الرسالة:</span>
+            <p className="text-xs font-semibold text-red-800 italic leading-relaxed">
+              "{detail}"
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
