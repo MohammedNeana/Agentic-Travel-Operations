@@ -20,7 +20,11 @@ const statusConfig: Record<string, { icon: typeof CheckCircle2; variant: 'succes
   escalated: { icon: AlertTriangle, variant: 'danger' },
 };
 
-export function TimelineView({ events, isLoading = false }: TimelineViewProps) {
+export function TimelineView({
+  events,
+  isLoading = false,
+  onRemoveEvent,
+}: TimelineViewProps) {
   if (isLoading) {
     return <TimelineSkeleton />;
   }
