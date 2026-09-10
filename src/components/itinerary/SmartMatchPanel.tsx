@@ -1,16 +1,17 @@
 'use client';
 
-import { Sparkles, Star, CheckCircle2, Users, ChevronLeft } from 'lucide-react';
+import { Sparkles, Star, CheckCircle2, Users, Plus } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import ar from '@/lib/i18n/ar';
-import type { SmartMatchRecommendation } from '@/types/itinerary';
+import type { SmartMatchRecommendation, ExperienceProvider } from '@/types/itinerary';
 
 interface SmartMatchPanelProps {
   recommendations: SmartMatchRecommendation[];
   isLoading?: boolean;
   isMatching?: boolean;
   onReMatch?: () => void;
+  onAddEvent?: (provider: ExperienceProvider) => void;
 }
 
 export function SmartMatchPanel({
@@ -18,6 +19,7 @@ export function SmartMatchPanel({
   isLoading = false,
   isMatching = false,
   onReMatch,
+  onAddEvent,
 }: SmartMatchPanelProps) {
   return (
     <div className="w-80 shrink-0 space-y-4">
@@ -56,7 +58,12 @@ export function SmartMatchPanel({
       ) : (
         <div className="space-y-3">
           {recommendations.map((rec, index) => (
-            <RecommendationCard key={rec.provider.id} recommendation={rec} rank={index + 1} />
+            <RecommendationCard
+              key={rec.provider.id}
+              recommendation={rec}
+              rank={index + 1}
+              onAdd={onAddEvent ? () => onAddEvent(rec.provider) : undefined}
+            />
           ))}
         </div>
       )}
@@ -69,9 +76,11 @@ export function SmartMatchPanel({
 function RecommendationCard({
   recommendation,
   rank,
+  onAdd,
 }: {
   recommendation: SmartMatchRecommendation;
   rank: number;
+  onAdd?: () => void;
 }) {
   const { provider, matchScore, reasons } = recommendation;
 
@@ -83,10 +92,7 @@ function RecommendationCard({
         : 'danger';
 
   return (
-    <button
-      type="button"
-      className="group w-full rounded-xl border border-gray-100 bg-white p-4 text-start transition-all hover:border-violet-200 hover:shadow-md cursor-pointer"
-    >
+    <div className="group w-full rounded-xl border border-gray-100 bg-white p-4 transition-all hover:border-violet-200 hover:shadow-md">
       {/* Top row: rank + score */}
       <div className="flex items-center justify-between">
         <span className="flex h-5 w-5 items-center justify-center rounded-full bg-gray-100 text-[10px] font-bold text-gray-500">
@@ -139,12 +145,23 @@ function RecommendationCard({
         ))}
       </div>
 
-      {/* CTA */}
-      <div className="mt-3 flex items-center justify-end text-xs font-semibold text-violet-600 opacity-0 transition-opacity group-hover:opacity-100">
-        <span>{ar.smartMatch.addToItinerary}</span>
-        <ChevronLeft className="me-0.5 h-3.5 w-3.5" />
+      {/* Action Button */}
+      <div className="mt-3.5 pt-3 border-t border-gray-100 flex items-center justify-between">
+        <span className="text-[11px] font-medium text-gray-400">
+          {provider.experienceType}
+        </span>
+        {onAdd && (
+          <button
+            type="button"
+            onClick={onAdd}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-700 hover:bg-violet-600 hover:text-white transition-all cursor-pointer shadow-xs active:scale-95"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>{ar.smartMatch.addToItinerary}</span>
+          </button>
+        )}
       </div>
-    </button>
+    </div>
   );
 }
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { Check, Loader2 } from 'lucide-react';
 import { TravelerProfileSidebar, defaultArabicTravelerProfile } from '@/components/itinerary/TravelerProfileSidebar';
 import { TimelineView } from '@/components/itinerary/TimelineView';
 import { SmartMatchPanel } from '@/components/itinerary/SmartMatchPanel';
@@ -8,9 +9,12 @@ import { WarningSection } from '@/components/itinerary/WarningSection';
 import ar from '@/lib/i18n/ar';
 import { formatArabicDateRange } from '@/lib/i18n/date';
 import { createBrowserSupabaseClient } from '@/lib/supabase/client';
+import { detectScheduleWarnings } from '@/lib/itinerary/warnings';
 import type {
   TravelerProfile,
   Itinerary,
+  ItineraryEvent,
+  ExperienceProvider,
   SmartMatchRecommendation,
   ScheduleWarning,
 } from '@/types/itinerary';
@@ -36,10 +40,14 @@ export function SmartItineraryBuilder({
   const [profile, setProfile] = useState<TravelerProfile | null>(initialProfile);
   const [travelers] = useState<TravelerProfile[]>(initialTravelers);
   const [itinerary, setItinerary] = useState<Itinerary | null>(initialItinerary ?? null);
+  const [itineraryEvents, setItineraryEvents] = useState<ItineraryEvent[]>(initialItinerary?.events ?? []);
   const [recommendations, setRecommendations] = useState<SmartMatchRecommendation[]>(initialRecommendations);
   const [warnings, setWarnings] = useState<ScheduleWarning[]>(initialWarnings);
   const [isReMatching, setIsReMatching] = useState(false);
   const [isLoadingItinerary, setIsLoadingItinerary] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
@@ -57,7 +65,7 @@ export function SmartItineraryBuilder({
     return () => window.removeEventListener('unhandledrejection', handleRejection);
   }, []);
 
-  // Real-time WebSocket subscription via Supabase Realtime for instant event updates (zero polling spam)
+  // Real-time WebSocket subscription via Supabase Realtime for instant event updates
   useEffect(() => {
     if (!profile?.id) return;
 
@@ -68,12 +76,17 @@ export function SmartItineraryBuilder({
         'postgres_changes',
         { event: '*', schema: 'public', table: 'itinerary_events' },
         async () => {
+          // If the user has local unsaved edits, do not overwrite them automatically
+          if (hasUnsavedChanges) return;
+
           try {
             const res = await fetch(`/api/itineraries?traveler_id=${profile.id}`);
             const data = await res.json();
             if (data.success && data.itinerary) {
               setItinerary(data.itinerary);
-              setWarnings(data.warnings || []);
+              const events = data.itinerary.events || [];
+              setItineraryEvents(events);
+              setWarnings(detectScheduleWarnings(events, profile));
             }
           } catch (err) {
             console.error('Failed to sync itinerary on realtime update:', err);
@@ -85,12 +98,15 @@ export function SmartItineraryBuilder({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [profile?.id]);
+  }, [profile?.id, hasUnsavedChanges]);
 
   const handleSelectTraveler = async (newProfile: TravelerProfile) => {
     setProfile(newProfile);
     setIsReMatching(true);
     setIsLoadingItinerary(true);
+    setHasUnsavedChanges(false);
+    setSaveSuccess(false);
+
     try {
       // Fetch recommendations and traveler-specific itinerary in parallel
       const [matchRes, itinRes] = await Promise.all([
@@ -115,7 +131,9 @@ export function SmartItineraryBuilder({
       }
       if (itinData.success && itinData.itinerary) {
         setItinerary(itinData.itinerary);
-        setWarnings(itinData.warnings || []);
+        const newEvents = itinData.itinerary.events || [];
+        setItineraryEvents(newEvents);
+        setWarnings(detectScheduleWarnings(newEvents, newProfile));
       }
     } catch (err) {
       console.error('Failed to switch traveler:', err);
@@ -147,6 +165,77 @@ export function SmartItineraryBuilder({
     }
   };
 
+  // Add event from Smart Match recommendations to timeline
+  const handleAddEvent = (provider: ExperienceProvider) => {
+    const lastEvent = itineraryEvents[itineraryEvents.length - 1];
+    const eventDate = lastEvent?.eventDate || itinerary?.startDate || profile?.arrivalDate || '2026-10-18';
+    const eventsOnDate = itineraryEvents.filter((e) => e.eventDate === eventDate);
+    const sortOrder = eventsOnDate.length + 1;
+
+    const newEvent: ItineraryEvent = {
+      id: crypto.randomUUID(),
+      tenantId: itinerary?.tenantId || profile?.tenantId || 'a1b2c3d4-0001-4000-8000-000000000001',
+      itineraryId: itinerary?.id || 'c1b2c3d4-0001-4000-8000-000000000001',
+      experienceProviderId: provider.id,
+      title: provider.name,
+      description: `تجربة ${provider.experienceType} مميزة في ${provider.city} مع مزود محلي معتمد.`,
+      eventDate,
+      startTime: '10:00',
+      endTime: '13:00',
+      sortOrder,
+      status: 'planned',
+      provider,
+    };
+
+    const updated = [...itineraryEvents, newEvent];
+    setItineraryEvents(updated);
+    setWarnings(detectScheduleWarnings(updated, profile));
+    setHasUnsavedChanges(true);
+    setSaveSuccess(false);
+  };
+
+  // Remove event from timeline
+  const handleRemoveEvent = (eventId: string) => {
+    const updated = itineraryEvents.filter((e) => e.id !== eventId);
+    setItineraryEvents(updated);
+    setWarnings(detectScheduleWarnings(updated, profile));
+    setHasUnsavedChanges(true);
+    setSaveSuccess(false);
+  };
+
+  // Sync current itinerary events to Supabase
+  const handleSaveItinerary = async () => {
+    if (!itinerary?.id) return;
+    setIsSaving(true);
+    setSaveSuccess(false);
+
+    try {
+      const res = await fetch('/api/itineraries/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          itineraryId: itinerary.id,
+          tenantId: itinerary.tenantId,
+          events: itineraryEvents,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setHasUnsavedChanges(false);
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 3500);
+      } else {
+        alert(`فشل الحفظ: ${data.error || 'حدث خطأ غير متوقع'}`);
+      }
+    } catch (err) {
+      console.error('Failed to save itinerary to Supabase:', err);
+      alert('تعذر الاتصال بالخادم لحفظ التغييرات.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   if (!isMounted) {
     return (
       <div className="min-h-screen bg-gray-50/50 flex items-center justify-center">
@@ -159,7 +248,6 @@ export function SmartItineraryBuilder({
   }
 
   const activeItinerary = itinerary;
-  const events = activeItinerary?.events ?? [];
 
   return (
     <div className="min-h-screen bg-gray-50/50">
@@ -187,11 +275,37 @@ export function SmartItineraryBuilder({
           </div>
 
           <div className="flex items-center gap-3">
+            {hasUnsavedChanges && (
+              <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200/80 px-2.5 py-1 rounded-full">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                تغييرات غير محفوظة
+              </span>
+            )}
             <button
               type="button"
-              className="rounded-xl bg-gray-900 px-4.5 py-2.5 text-xs font-bold text-white shadow-xs transition-all hover:bg-gray-800 hover:shadow-md cursor-pointer"
+              onClick={handleSaveItinerary}
+              disabled={isSaving}
+              className={`inline-flex items-center gap-2 rounded-xl px-4.5 py-2.5 text-xs font-bold text-white shadow-xs transition-all cursor-pointer ${
+                saveSuccess
+                  ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'
+                  : hasUnsavedChanges
+                    ? 'bg-violet-600 hover:bg-violet-700 shadow-md'
+                    : 'bg-gray-900 hover:bg-gray-800 hover:shadow-md'
+              } disabled:opacity-60`}
             >
-              {ar.header.saveItinerary}
+              {isSaving ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>جارٍ الحفظ...</span>
+                </>
+              ) : saveSuccess ? (
+                <>
+                  <Check className="h-3.5 w-3.5" />
+                  <span>تم الحفظ بنجاح</span>
+                </>
+              ) : (
+                <span>{ar.header.saveItinerary}</span>
+              )}
             </button>
           </div>
         </div>
@@ -212,12 +326,17 @@ export function SmartItineraryBuilder({
           onSelectTraveler={handleSelectTraveler}
           isLoading={isLoading}
         />
-        <TimelineView events={events} isLoading={isLoading || isLoadingItinerary} />
+        <TimelineView
+          events={itineraryEvents}
+          isLoading={isLoading || isLoadingItinerary}
+          onRemoveEvent={handleRemoveEvent}
+        />
         <SmartMatchPanel
           recommendations={recommendations}
           isLoading={isLoading}
           isMatching={isReMatching}
           onReMatch={handleReMatch}
+          onAddEvent={handleAddEvent}
         />
       </main>
     </div>

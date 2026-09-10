@@ -1,6 +1,6 @@
 'use client';
 
-import { Clock, MapPin, CheckCircle2, Circle, XCircle, AlertTriangle } from 'lucide-react';
+import { Clock, MapPin, CheckCircle2, Circle, XCircle, AlertTriangle, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
 import ar from '@/lib/i18n/ar';
@@ -10,6 +10,7 @@ import type { ItineraryEvent } from '@/types/itinerary';
 interface TimelineViewProps {
   events: ItineraryEvent[];
   isLoading?: boolean;
+  onRemoveEvent?: (eventId: string) => void;
 }
 
 const statusConfig: Record<string, { icon: typeof CheckCircle2; variant: 'success' | 'warning' | 'danger' }> = {
@@ -68,7 +69,11 @@ export function TimelineView({ events, isLoading = false }: TimelineViewProps) {
             <div className="absolute start-[9px] top-2 bottom-2 w-px bg-gray-200" />
 
             {dateEvents.map((event) => (
-              <EventCard key={event.id} event={event} />
+              <EventCard
+                key={event.id}
+                event={event}
+                onRemove={onRemoveEvent ? () => onRemoveEvent(event.id) : undefined}
+              />
             ))}
           </div>
         </div>
@@ -79,7 +84,13 @@ export function TimelineView({ events, isLoading = false }: TimelineViewProps) {
 
 // ─── Event Card ──────────────────────────────────────────────
 
-function EventCard({ event }: { event: ItineraryEvent }) {
+function EventCard({
+  event,
+  onRemove,
+}: {
+  event: ItineraryEvent;
+  onRemove?: () => void;
+}) {
   const config = statusConfig[event.status] ?? statusConfig.planned;
   const StatusIcon = config.icon;
 
@@ -123,15 +134,27 @@ function EventCard({ event }: { event: ItineraryEvent }) {
           </div>
         </div>
 
-        <StatusIcon
-          className={`mt-1 h-4 w-4 shrink-0 ${
-            config.variant === 'success'
-              ? 'text-emerald-500'
-              : config.variant === 'danger'
-                ? 'text-red-400'
-                : 'text-amber-500'
-          }`}
-        />
+        <div className="flex items-center gap-1.5">
+          <StatusIcon
+            className={`h-4 w-4 shrink-0 ${
+              config.variant === 'success'
+                ? 'text-emerald-500'
+                : config.variant === 'danger'
+                  ? 'text-red-400'
+                  : 'text-amber-500'
+            }`}
+          />
+          {onRemove && (
+            <button
+              type="button"
+              onClick={onRemove}
+              className="rounded-lg p-1.5 text-gray-400 opacity-60 hover:opacity-100 hover:bg-red-50 hover:text-red-600 transition-all cursor-pointer"
+              title="حذف الفعالية من الجدول"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       {event.provider && (
