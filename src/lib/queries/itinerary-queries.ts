@@ -1,5 +1,5 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { generateTextEmbedding } from '@/lib/ai/embeddings';
+import { generateTextEmbedding, generateProviderEmbedding } from '@/lib/ai/embeddings';
 import type {
   Itinerary,
   ItineraryEvent,
@@ -91,15 +91,30 @@ export async function getExperienceProviders(): Promise<ExperienceProvider[]> {
   return (data as DbExperienceProvider[]).map(mapProvider);
 }
 
-export async function getActiveItinerary(): Promise<Itinerary | null> {
+export async function getActiveItinerary(travelerId?: string): Promise<Itinerary | null> {
   const supabase = createServerSupabaseClient();
 
-  const { data: itineraryData, error: itError } = await supabase
-    .from('itineraries')
-    .select('*')
+  let query = supabase.from('itineraries').select('*');
+  if (travelerId) {
+    query = query.eq('traveler_profile_id', travelerId);
+  }
+
+  let { data: itineraryData, error: itError } = await query
     .order('created_at', { ascending: true })
     .limit(1)
     .single();
+
+  if ((itError || !itineraryData) && travelerId) {
+    // If not found by traveler_profile_id, fall back to first itinerary
+    const fallback = await supabase
+      .from('itineraries')
+      .select('*')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .single();
+    itineraryData = fallback.data;
+    itError = fallback.error;
+  }
 
   if (itError || !itineraryData) {
     console.error('Error fetching itinerary:', itError);
@@ -202,11 +217,37 @@ export async function getSmartMatchRecommendations(
 
     const budgetInfo = profile?.budgetTier ? `الميزانية: ${profile.budgetTier}` : '';
     const queryText = `اهتمامات الزائر: ${interests.join('، ')} ${budgetInfo ? '| ' + budgetInfo : ''}`;
+    console.log(`\x1b[34m[Itinerary Queries]\x1b[0m 🔍 Querying recommendations for traveler: "${profile?.name ?? 'Default'}"`);
+
+    const supabase = createServerSupabaseClient();
+
+    // Check if any providers have NULL embeddings and backfill them
+    const { data: unindexedProviders } = await supabase
+      .from('experience_providers')
+      .select('id, name, city, experience_type, capacity, verification_status')
+      .is('embedding', null);
+
+    if (unindexedProviders && unindexedProviders.length > 0) {
+      console.log(`\x1b[33m[Itinerary Queries]\x1b[0m ⚙️ Auto-backfilling 384-d embeddings for ${unindexedProviders.length} providers...`);
+      for (const p of unindexedProviders) {
+        const emb = await generateProviderEmbedding({
+          name: p.name,
+          city: p.city,
+          experience_type: p.experience_type,
+          capacity: p.capacity ?? 10,
+          verification_status: p.verification_status,
+        });
+        await supabase
+          .from('experience_providers')
+          .update({ embedding: JSON.stringify(emb) })
+          .eq('id', p.id);
+      }
+      console.log(`\x1b[32m[Itinerary Queries]\x1b[0m ✅ Backfilled embeddings for all providers.`);
+    }
 
     // Generate real 384-dimensional vector embedding for traveler preferences
     const queryEmbedding = await generateTextEmbedding(queryText);
 
-    const supabase = createServerSupabaseClient();
     const { data: rows, error } = await supabase.rpc('match_providers_hybrid', {
       query_embedding: JSON.stringify(queryEmbedding),
       query_text: interests.join(' '),
@@ -225,6 +266,8 @@ export async function getSmartMatchRecommendations(
         reasons: ['مزود تجارب محلي معتمد', `مناسب لرحلات ${p.city}`],
       }));
     }
+
+    console.log(`\x1b[34m[Itinerary Queries]\x1b[0m 📊 Received ${rows?.length ?? 0} hybrid matched providers from Supabase pgvector.`);
 
     interface DbMatchedRow {
       id: string;
@@ -266,10 +309,13 @@ export async function getSmartMatchRecommendations(
   }
 }
 
-export function detectScheduleWarnings(events: ItineraryEvent[]): ScheduleWarning[] {
+export function detectScheduleWarnings(
+  events: ItineraryEvent[],
+  profile?: TravelerProfile | null
+): ScheduleWarning[] {
   const warnings: ScheduleWarning[] = [];
 
-  // Detect time overlap on the same day
+  // 1. Time Conflict Warning: Detect real time overlap on the same day
   for (let i = 0; i < events.length; i++) {
     for (let j = i + 1; j < events.length; j++) {
       const e1 = events[i];
@@ -293,22 +339,70 @@ export function detectScheduleWarnings(events: ItineraryEvent[]): ScheduleWarnin
     }
   }
 
-  // Capacity Warning
-  warnings.push({
-    id: 'w-capacity',
-    severity: 'warning',
-    title: 'ملاحظة حول السعة الاستيعابية',
-    message: 'شركة الغوص في البحر الأحمر: السعة القصوى 8 ضيوف — مجموعتكم المكونة من 6 أفراد تترك هامشاً بسيطاً للمرشدين.',
-  });
+  // 2. Operational Escalation Warning: Triggered when an event is escalated (e.g. from WhatsApp voice note)
+  for (const ev of events) {
+    if (ev.status === 'escalated') {
+      warnings.push({
+        id: `escalated-${ev.id}`,
+        severity: 'error',
+        title: 'تنبيه تصعيد تشغيلي عاجل (واتساب)',
+        message: `تم تصعيد فعالية "${ev.title}" بعد تلقي بلاغ صوتي عاجل يفيد بتأخير أو طارئ يتطلب تدخل فريق العمليات.`,
+        relatedEventIds: [ev.id],
+      });
+    }
+  }
 
-  // Accessibility Warning
-  warnings.push({
-    id: 'w-accessibility',
-    severity: 'info',
-    title: 'ملاحظة حول إمكانية الوصول',
-    message: 'يرجى تأكيد جاهزية مسار الكراسي المتحركة في موقع مقابر الحِجر بالعُلا نظراً لطبيعة التضاريس الرملية.',
-    relatedEventIds: ['d1b2c3d4-0001-4000-8000-000000000001'],
-  });
+  // 3. Dynamic Capacity Warning: Compare traveler group size against event provider capacity
+  if (profile?.groupSize) {
+    for (const ev of events) {
+      if (ev.status === 'cancelled') continue;
+      const cap = ev.provider?.capacity;
+      if (!cap) continue;
+
+      if (profile.groupSize > cap) {
+        warnings.push({
+          id: `cap-exceeded-${ev.id}`,
+          severity: 'error',
+          title: 'تجاوز السعة الاستيعابية للمزود',
+          message: `${ev.provider?.name || ev.title}: السعة القصوى للمزود (${cap} ضيوف) أقل من عدد أفراد مجموعتكم (${profile.groupSize} أفراد).`,
+          relatedEventIds: [ev.id],
+        });
+      } else if (cap - profile.groupSize <= 2 && cap <= 10) {
+        warnings.push({
+          id: `cap-tight-${ev.id}`,
+          severity: 'warning',
+          title: 'ملاحظة حول السعة الاستيعابية',
+          message: `${ev.provider?.name || ev.title}: السعة القصوى ${cap} ضيوف — مجموعتكم المكونة من ${profile.groupSize} أفراد تترك هامشاً بسيطاً للمرشدين والمرافقين (${cap - profile.groupSize} مقاعد متبقية).`,
+          relatedEventIds: [ev.id],
+        });
+      }
+    }
+  }
+
+  // 4. Dynamic Accessibility Warning: Only if traveler mobilityNotes indicate physical/wheelchair constraints
+  if (profile?.mobilityNotes) {
+    const hasMobilityConstraint = /كرسي|كراسي|تنقل|إعاقة|مريح|wheelchair|mobility/i.test(
+      profile.mobilityNotes
+    );
+
+    if (hasMobilityConstraint) {
+      for (const ev of events) {
+        if (ev.status === 'cancelled') continue;
+        const searchable = `${ev.title} ${ev.description || ''} ${ev.provider?.experienceType || ''}`;
+        const isRuggedTerrain = /صحراو|سفاري|الحِجر|تضاريس|رمل|تسلق|وعر/i.test(searchable);
+
+        if (isRuggedTerrain) {
+          warnings.push({
+            id: `access-${ev.id}`,
+            severity: 'info',
+            title: 'ملاحظة حول إمكانية الوصول',
+            message: `تنبيه خاص بالزائر (${profile.name}): فعالية "${ev.title}" تقع في منطقة ذات تضاريس قد تتطلب ترتيبات مسبقة لملاءمة متطلبات التنقل (${profile.mobilityNotes}).`,
+            relatedEventIds: [ev.id],
+          });
+        }
+      }
+    }
+  }
 
   return warnings;
 }

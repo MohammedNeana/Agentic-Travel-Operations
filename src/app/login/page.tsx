@@ -12,7 +12,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [companyName, setCompanyName] = useState('There DMC');
-  const [tenantId, setTenantId] = useState('a1b2c3d4-0001-4000-8000-000000000001');
 
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -37,7 +36,13 @@ export default function LoginPage() {
 
     try {
       if (isRegister) {
-        // Sign Up with user metadata containing tenant_id
+        // Auto-generate tenant_id securely behind the scenes
+        const isDefaultOrg = !companyName.trim() || companyName.trim().toLowerCase() === 'there dmc';
+        const autoTenantId = isDefaultOrg
+          ? 'a1b2c3d4-0001-4000-8000-000000000001'
+          : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'a1b2c3d4-0001-4000-8000-000000000001');
+
+        // Sign Up with user metadata containing the auto-generated tenant_id
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password,
@@ -45,7 +50,7 @@ export default function LoginPage() {
             data: {
               full_name: fullName.trim() || 'مدير الوجهة',
               company_name: companyName.trim() || 'There DMC',
-              tenant_id: tenantId.trim() || 'a1b2c3d4-0001-4000-8000-000000000001',
+              tenant_id: autoTenantId,
             },
           },
         });
@@ -197,23 +202,6 @@ export default function LoginPage() {
                       className="block w-full rounded-xl border border-gray-200 ps-9 pe-3 py-2 text-xs font-medium focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
                     />
                   </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-gray-700">
-                    معرف المستأجر (Tenant ID)
-                  </label>
-                  <div className="mt-1 relative rounded-xl shadow-xs">
-                    <input
-                      type="text"
-                      value={tenantId}
-                      onChange={(e) => setTenantId(e.target.value)}
-                      className="block w-full rounded-xl border border-gray-200 px-3 py-2 text-xs font-mono text-gray-500 bg-gray-50/70"
-                    />
-                  </div>
-                  <p className="mt-1 text-[10px] text-gray-400">
-                    معرف المستأجر المسبق لمنظمة There DMC للوصول إلى البيانات المجهزة.
-                  </p>
                 </div>
               </>
             )}

@@ -21,6 +21,9 @@ async function getExtractor(): Promise<FeatureExtractor> {
   }
 
   extractorPromise = (async () => {
+    console.log('\x1b[36m[Local AI]\x1b[0m 🚀 Loading @xenova/transformers pipeline (Xenova/all-MiniLM-L6-v2)...');
+    const startTime = Date.now();
+
     const { pipeline, env } = await import('@xenova/transformers');
     const path = await import('path');
     env.cacheDir = path.join(process.cwd(), 'node_modules/@xenova/transformers/.cache');
@@ -43,6 +46,8 @@ async function getExtractor(): Promise<FeatureExtractor> {
 
     const pipelineInstance = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
     extractorInstance = pipelineInstance as unknown as FeatureExtractor;
+    const duration = Date.now() - startTime;
+    console.log(`\x1b[32m[Local AI]\x1b[0m  Model loaded successfully in ${duration}ms (100% local, 0 external calls).`);
     return extractorInstance;
   })();
 
@@ -59,9 +64,18 @@ export async function generateTextEmbedding(
   _apiKey?: string
 ): Promise<number[]> {
   const cleanText = text && text.trim().length > 0 ? text.trim() : 'تجربة سياحية سعودية أصيلة';
+  console.log(`\x1b[36m[Local AI]\x1b[0m 🧠 Generating embedding for: "${cleanText.length > 60 ? cleanText.slice(0, 60) + '...' : cleanText}"`);
+  const t0 = Date.now();
+
   const extractor = await getExtractor();
   const output = await extractor(cleanText, { pooling: 'mean', normalize: true });
-  return Array.from(output.data);
+  const vector = Array.from(output.data);
+  const elapsed = Date.now() - t0;
+
+  console.log(
+    `\x1b[32m[Local AI]\x1b[0m ⚡ Embedding created in ${elapsed}ms | Dim: ${vector.length} | Sample: [${vector.slice(0, 3).map((v) => v.toFixed(4)).join(', ')}, ...]`
+  );
+  return vector;
 }
 
 /**
@@ -73,6 +87,7 @@ export async function generateProviderEmbedding(
   _apiKey?: string
 ): Promise<number[]> {
   const inputSemanticText = `${provider.name} | ${provider.city} | ${provider.experience_type} (سعة: ${provider.capacity} ضيوف)`;
+  console.log(`\x1b[36m[Local AI]\x1b[0m 🏢 Embedding provider: "${provider.name}" (${provider.city})`);
   return generateTextEmbedding(inputSemanticText);
 }
 

@@ -41,6 +41,22 @@ export async function getWhatsAppMediaUrl(
 
   if (!response.ok) {
     const errorText = await response.text();
+    let isExpiredToken = false;
+    try {
+      const errObj = JSON.parse(errorText);
+      if (errObj?.error?.code === 190) {
+        isExpiredToken = true;
+      }
+    } catch {
+      // not JSON
+    }
+
+    if (isExpiredToken) {
+      throw new Error(
+        `WhatsApp Access Token has expired (Meta OAuth Error 190). Meta temporary tokens expire after 24 hours. Please copy a new token from your Meta Dashboard (WhatsApp > API Setup) into WHATSAPP_ACCESS_TOKEN in .env.local.`
+      );
+    }
+
     throw new Error(
       `Failed to retrieve WhatsApp media URL (HTTP ${response.status}): ${errorText}`
     );

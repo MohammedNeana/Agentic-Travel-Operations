@@ -10,14 +10,15 @@ import {
 export const dynamic = 'force-dynamic';
 
 export default async function Home() {
-  const [travelers, itinerary] = await Promise.all([
-    getTravelerProfiles(),
-    getActiveItinerary(),
+  const travelers = await getTravelerProfiles();
+  const activeProfile = travelers[0] ?? defaultArabicTravelerProfile;
+
+  const [itinerary, recommendations] = await Promise.all([
+    getActiveItinerary(activeProfile.id),
+    getSmartMatchRecommendations(activeProfile),
   ]);
 
-  const activeProfile = travelers[0] ?? defaultArabicTravelerProfile;
-  const recommendations = await getSmartMatchRecommendations(activeProfile);
-  const warnings = itinerary ? detectScheduleWarnings(itinerary.events) : [];
+  const warnings = itinerary ? detectScheduleWarnings(itinerary.events, activeProfile) : [];
 
   return (
     <SmartItineraryBuilder

@@ -110,6 +110,7 @@ export async function POST(request: NextRequest) {
           // 4. If Emergency or Delay, escalate event in Supabase
           if (classification.isEscalationRequired) {
             const escalationResult = await escalateItineraryEvent({
+              transcriptionText: transcription.text,
               reason: classification.reason,
               senderPhone: msg.fromPhoneNumber,
             });

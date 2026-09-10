@@ -7,6 +7,7 @@ import { SmartMatchPanel } from '@/components/itinerary/SmartMatchPanel';
 import { WarningSection } from '@/components/itinerary/WarningSection';
 import ar from '@/lib/i18n/ar';
 import { formatArabicDateRange } from '@/lib/i18n/date';
+import { createBrowserSupabaseClient } from '@/lib/supabase/client';
 import type {
   TravelerProfile,
   Itinerary,
@@ -34,35 +35,93 @@ export function SmartItineraryBuilder({
   const [isMounted, setIsMounted] = useState(false);
   const [profile, setProfile] = useState<TravelerProfile | null>(initialProfile);
   const [travelers] = useState<TravelerProfile[]>(initialTravelers);
-  const [itinerary] = useState<Itinerary | null>(initialItinerary ?? null);
+  const [itinerary, setItinerary] = useState<Itinerary | null>(initialItinerary ?? null);
   const [recommendations, setRecommendations] = useState<SmartMatchRecommendation[]>(initialRecommendations);
-  const [warnings] = useState<ScheduleWarning[]>(initialWarnings);
+  const [warnings, setWarnings] = useState<ScheduleWarning[]>(initialWarnings);
   const [isReMatching, setIsReMatching] = useState(false);
+  const [isLoadingItinerary, setIsLoadingItinerary] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
+  // Filter out external Chrome extension unhandled rejection noise from Next.js terminal logs
+  useEffect(() => {
+    const handleRejection = (event: PromiseRejectionEvent) => {
+      const reasonStr = String(event.reason?.stack || event.reason || '');
+      if (reasonStr.includes('chrome-extension://')) {
+        event.preventDefault();
+      }
+    };
+    window.addEventListener('unhandledrejection', handleRejection);
+    return () => window.removeEventListener('unhandledrejection', handleRejection);
+  }, []);
+
+  // Real-time WebSocket subscription via Supabase Realtime for instant event updates (zero polling spam)
+  useEffect(() => {
+    if (!profile?.id) return;
+
+    const supabase = createBrowserSupabaseClient();
+    const channel = supabase
+      .channel(`realtime-itinerary-${profile.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'itinerary_events' },
+        async () => {
+          try {
+            const res = await fetch(`/api/itineraries?traveler_id=${profile.id}`);
+            const data = await res.json();
+            if (data.success && data.itinerary) {
+              setItinerary(data.itinerary);
+              setWarnings(data.warnings || []);
+            }
+          } catch (err) {
+            console.error('Failed to sync itinerary on realtime update:', err);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [profile?.id]);
+
   const handleSelectTraveler = async (newProfile: TravelerProfile) => {
     setProfile(newProfile);
     setIsReMatching(true);
+    setIsLoadingItinerary(true);
     try {
-      const res = await fetch('/api/providers/match', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          interests: newProfile.interests,
-          tenant_id: newProfile.tenantId || itinerary?.tenantId || 'a1b2c3d4-0001-4000-8000-000000000001',
+      // Fetch recommendations and traveler-specific itinerary in parallel
+      const [matchRes, itinRes] = await Promise.all([
+        fetch('/api/providers/match', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            interests: newProfile.interests,
+            tenant_id: newProfile.tenantId || itinerary?.tenantId || 'a1b2c3d4-0001-4000-8000-000000000001',
+          }),
         }),
-      });
-      const data = await res.json();
-      if (data.success && Array.isArray(data.recommendations)) {
-        setRecommendations(data.recommendations);
+        fetch(`/api/itineraries?traveler_id=${newProfile.id}`),
+      ]);
+
+      const [matchData, itinData] = await Promise.all([
+        matchRes.json(),
+        itinRes.json(),
+      ]);
+
+      if (matchData.success && Array.isArray(matchData.recommendations)) {
+        setRecommendations(matchData.recommendations);
+      }
+      if (itinData.success && itinData.itinerary) {
+        setItinerary(itinData.itinerary);
+        setWarnings(itinData.warnings || []);
       }
     } catch (err) {
-      console.error('Failed to rematch providers for selected traveler:', err);
+      console.error('Failed to switch traveler:', err);
     } finally {
       setIsReMatching(false);
+      setIsLoadingItinerary(false);
     }
   };
 
@@ -153,7 +212,7 @@ export function SmartItineraryBuilder({
           onSelectTraveler={handleSelectTraveler}
           isLoading={isLoading}
         />
-        <TimelineView events={events} isLoading={isLoading} />
+        <TimelineView events={events} isLoading={isLoading || isLoadingItinerary} />
         <SmartMatchPanel
           recommendations={recommendations}
           isLoading={isLoading}
