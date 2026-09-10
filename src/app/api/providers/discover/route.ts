@@ -83,9 +83,11 @@ export async function POST(request: NextRequest) {
         experience_type: extracted.experience_type,
         capacity: extracted.capacity,
         verification_status: extracted.verification_status,
+        phone_number: extracted.phone_number || null,
+        phone: extracted.phone_number || null,
         embedding: JSON.stringify(embedding), // Format for pgvector column
       })
-      .select('id, tenant_id, name, city, experience_type, capacity, verification_status, created_at')
+      .select('id, tenant_id, name, city, experience_type, capacity, verification_status, phone_number, created_at')
       .single();
 
     if (insertError || !insertedProvider) {

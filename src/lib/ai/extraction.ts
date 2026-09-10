@@ -29,6 +29,13 @@ export const ExperienceProviderSchema = z.object({
     .enum(['pending', 'verified', 'rejected'])
     .default('pending')
     .describe('Verification status of the provider (defaults to pending for new discoveries)'),
+  phone_number: z
+    .string()
+    .nullable()
+    .optional()
+    .describe(
+      'Direct contact or WhatsApp phone number of the provider with country code (e.g. +9665XXXXXXXX or 05XXXXXXXX), or null if not found'
+    ),
 });
 
 export type ExtractedExperienceProvider = z.infer<typeof ExperienceProviderSchema>;
@@ -90,6 +97,33 @@ function heuristicExtract(text: string): ExtractedExperienceProvider {
     detectedType = 'رصد الفلك والنجوم';
   }
 
+  // Phone number extraction (WhatsApp / Mobile)
+  let detectedPhone: string | null = null;
+  const keywordMatch = text.match(
+    /(?:واتساب|واتس|جوال|هاتف|تواصل|اتصال|رقم|موبايل|phone|whatsapp|mobile|tel)\s*[:：\-]?\s*(\+?[\d\s\-\(\)]{9,20})/i
+  );
+  if (keywordMatch && keywordMatch[1]) {
+    const cleaned = keywordMatch[1].replace(/[^\d+]/g, '');
+    if (cleaned.length >= 9 && cleaned.length <= 16) {
+      detectedPhone = cleaned;
+    }
+  }
+
+  if (!detectedPhone) {
+    const saudiMatch = text.match(/(?:\+?966|00966|0)?5\d{8}\b/);
+    if (saudiMatch && saudiMatch[0]) {
+      let num = saudiMatch[0].replace(/[^\d+]/g, '');
+      if (num.startsWith('05')) {
+        num = '+966' + num.slice(1);
+      } else if (num.startsWith('5')) {
+        num = '+966' + num;
+      } else if (num.startsWith('966')) {
+        num = '+' + num;
+      }
+      detectedPhone = num;
+    }
+  }
+
   // Name extraction (first line or quoted or first words)
   const lines = text.split(/[\n.]/).map((l) => l.trim()).filter(Boolean);
   let name = lines[0] || 'مزود تجربة سياحية سعودي';
@@ -103,6 +137,7 @@ function heuristicExtract(text: string): ExtractedExperienceProvider {
     experience_type: detectedType,
     capacity,
     verification_status: 'pending',
+    phone_number: detectedPhone,
   };
 }
 
@@ -130,7 +165,8 @@ Extract the details accurately in Arabic or English based on the input:
 - city: The Saudi city or destination (e.g. AlUla / العُلا, Riyadh / الرياض, Jeddah / جدة, NEOM / نيوم, Diriyah / الدرعية, etc.).
 - experience_type: The primary tourist experience category.
 - capacity: An integer representing the maximum guest capacity. If unstated, infer a reasonable capacity between 6 and 20 based on the experience type.
-- verification_status: Always set to "pending" for newly extracted providers.`;
+- verification_status: Always set to "pending" for newly extracted providers.
+- phone_number: The contact or WhatsApp mobile number (e.g. +9665XXXXXXXX, 05XXXXXXXX). If not mentioned, return null.`;
 
   const jsonSchema = {
     name: 'experience_provider',
@@ -159,8 +195,20 @@ Extract the details accurately in Arabic or English based on the input:
           enum: ['pending', 'verified', 'rejected'],
           description: 'Initial verification status, default pending',
         },
+        phone_number: {
+          type: ['string', 'null'],
+          description:
+            'Contact or WhatsApp mobile phone number of the provider, or null if not found in text',
+        },
       },
-      required: ['name', 'city', 'experience_type', 'capacity', 'verification_status'],
+      required: [
+        'name',
+        'city',
+        'experience_type',
+        'capacity',
+        'verification_status',
+        'phone_number',
+      ],
       additionalProperties: false,
     },
   };

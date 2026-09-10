@@ -25,14 +25,14 @@ export function formatBookingNotificationText(details: ProviderNotificationDetai
  * Resolves the target recipient phone number, falling back to the developer
  * verified test recipient phone configured in environment variables.
  */
-export function resolveRecipientPhone(providerPhone?: string | null): string {
+export function resolveRecipientPhone(providerPhone?: string | null): { phone: string; isRealProvider: boolean } {
   const cleaned = cleanPhoneNumber(providerPhone || '');
   if (cleaned && cleaned.length >= 8) {
-    return cleaned;
+    return { phone: cleaned, isRealProvider: true };
   }
 
   const fallback = cleanPhoneNumber(process.env.WHATSAPP_TEST_RECIPIENT_PHONE || '');
-  return fallback;
+  return { phone: fallback, isRealProvider: false };
 }
 
 /**
@@ -63,12 +63,22 @@ export async function sendProviderNotification(
     return { success: false, error: errorMsg };
   }
 
-  const recipientPhone = resolveRecipientPhone(providerPhone);
+  const { phone: recipientPhone, isRealProvider } = resolveRecipientPhone(providerPhone);
   if (!recipientPhone) {
     const errorMsg =
       'No valid recipient phone number found. Neither provider phone nor WHATSAPP_TEST_RECIPIENT_PHONE is configured.';
     console.error(`[WhatsApp Outbound] ❌ ${errorMsg}`);
     return { success: false, error: errorMsg };
+  }
+
+  if (isRealProvider) {
+    console.log(
+      `[WhatsApp Outbound] 📱 Using real provider phone number from database: ${recipientPhone}`
+    );
+  } else {
+    console.log(
+      `[WhatsApp Outbound] 🧪 Provider lacks real phone in database. Using developer test recipient phone: ${recipientPhone}`
+    );
   }
 
   const messageText = formatBookingNotificationText(eventDetails);

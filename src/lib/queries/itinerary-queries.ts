@@ -17,6 +17,7 @@ interface DbExperienceProvider {
   experience_type: string;
   capacity: number;
   verification_status: 'pending' | 'verified' | 'rejected';
+  phone_number?: string | null;
 }
 
 interface DbItineraryEvent {
@@ -72,6 +73,7 @@ function mapProvider(db: DbExperienceProvider): ExperienceProvider {
     experienceType: db.experience_type,
     capacity: db.capacity,
     verificationStatus: db.verification_status,
+    phoneNumber: db.phone_number || undefined,
     rating: ratings[db.name] ?? 4.8,
     priceRange: prices[db.name] ?? '$$$',
   };
@@ -81,7 +83,7 @@ export async function getExperienceProviders(): Promise<ExperienceProvider[]> {
   const supabase = createServerSupabaseClient();
   const { data, error } = await supabase
     .from('experience_providers')
-    .select('id, tenant_id, name, city, experience_type, capacity, verification_status')
+    .select('id, tenant_id, name, city, experience_type, capacity, verification_status, phone_number')
     .order('created_at', { ascending: true });
 
   if (error) {

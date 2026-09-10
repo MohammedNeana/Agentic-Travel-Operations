@@ -14,6 +14,7 @@ import {
   FileText,
   RefreshCw,
   SlidersHorizontal,
+  Phone,
 } from 'lucide-react';
 import { createBrowserSupabaseClient } from '@/lib/supabase/client';
 import ar from '@/lib/i18n/ar';
@@ -26,13 +27,14 @@ interface ExperienceProviderItem {
   experience_type: string;
   capacity: number | null;
   verification_status: 'pending' | 'verified' | 'rejected';
+  phone_number?: string | null;
   created_at: string;
 }
 
 const SAMPLE_PROVIDER_TEXTS = [
-  'مخيم نجوم العلا الفاخر في قلب وادي عِشار. نقدم تجارب مراقبة النجوم مع فلكيين سعوديين معتمدين، وحفلات عشاء تراثية خاصة تحت ضوء القمر. السعة الاستيعابية للمخيم حتى 25 ضيفاً مع خدمة نقل خاصة بدفع رباعي.',
-  'فريق دروب عسير للمغامرات الجبلية في أبها. تنظيم مسارات هايكنج احترافية في جبال السودة ووادي لجب، مع إرشاد سياحي محلي ووجبات عسيرية شعبية. السعة اليومية 15 مغامراً.',
-  'جولات جدة التاريخية الأصيلة. رحلات استكشافية ثقافية في حارة المظلوم وسوق العلوي مع مرشدين تراثيين مرخصين، وزيارة البيوت التاريخية وتذوق المأكولات الحجازية. سعة الجولة 12 شخصاً.',
+  'مخيم نجوم العلا الفاخر في قلب وادي عِشار. نقدم تجارب مراقبة النجوم مع فلكيين سعوديين معتمدين، وحفلات عشاء تراثية خاصة تحت ضوء القمر. السعة الاستيعابية للمخيم حتى 25 ضيفاً مع خدمة نقل خاصة بدفع رباعي. للحجز والاستفسار عبر واتساب: +966501234567',
+  'فريق دروب عسير للمغامرات الجبلية في أبها. تنظيم مسارات هايكنج احترافية في جبال السودة ووادي لجب، مع إرشاد سياحي محلي ووجبات عسيرية شعبية. السعة اليومية 15 مغامراً. للتواصل واتساب: 0558765432',
+  'جولات جدة التاريخية الأصيلة. رحلات استكشافية ثقافية في حارة المظلوم وسوق العلوي مع مرشدين تراثيين مرخصين، وزيارة البيوت التاريخية وتذوق المأكولات الحجازية. سعة الجولة 12 شخصاً. هاتف وواتساب: +966549871234',
 ];
 
 export default function ProvidersPage() {
@@ -58,7 +60,7 @@ export default function ProvidersPage() {
       const supabase = createBrowserSupabaseClient();
       const { data, error } = await supabase
         .from('experience_providers')
-        .select('id, tenant_id, name, city, experience_type, capacity, verification_status, created_at')
+        .select('id, tenant_id, name, city, experience_type, capacity, verification_status, phone_number, created_at')
         .eq('tenant_id', tId)
         .order('created_at', { ascending: false });
 
@@ -241,7 +243,7 @@ export default function ProvidersPage() {
                     1536 أبعاد (pgvector)
                   </span>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1 text-xs">
                   <div>
                     <span className="text-[10px] text-emerald-600 block">اسم المزود:</span>
                     <strong className="text-gray-900">{extractionResult.name}</strong>
@@ -257,6 +259,12 @@ export default function ProvidersPage() {
                   <div>
                     <span className="text-[10px] text-emerald-600 block">السعة:</span>
                     <strong className="text-gray-900">{extractionResult.capacity ?? 'مرن'} ضيوف</strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-emerald-600 block">رقم الواتساب:</span>
+                    <strong className="text-gray-900 font-mono" dir="ltr">
+                      {extractionResult.phone_number || 'غير متوفر'}
+                    </strong>
                   </div>
                 </div>
               </div>
@@ -399,10 +407,30 @@ export default function ProvidersPage() {
                     </span>
                   </div>
 
-                  <div className="mt-3">
+                  <div className="mt-3 flex items-center justify-between gap-2 flex-wrap">
                     <span className="inline-block rounded-lg bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-700">
                       {provider.experience_type}
                     </span>
+
+                    {provider.phone_number ? (
+                      <a
+                        href={`https://wa.me/${provider.phone_number.replace(/[^\d]/g, '')}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 border border-emerald-200/80 hover:bg-emerald-100 transition-colors cursor-pointer group"
+                        title="مراسلة المزود مباشرة عبر واتساب"
+                      >
+                        <svg className="h-3 w-3 fill-emerald-600 shrink-0" viewBox="0 0 24 24">
+                          <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.303-.058.116-.087.188-.173.289l-.26.303c-.087.087-.177.181-.076.355.101.173.449.742.964 1.201.662.591 1.221.774 1.394.861.173.086.275.072.376-.044.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.203c.043.071.043.419-.101.824zM12 2C6.477 2 2 6.477 2 12c0 1.891.526 3.66 1.438 5.168L2 22l4.98-1.306A9.957 9.957 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18.167c-1.609 0-3.12-.489-4.385-1.326l-.314-.209-2.95.774.787-2.875-.231-.368A8.136 8.136 0 013.833 12c0-4.503 3.664-8.167 8.167-8.167 4.503 0 8.167 3.664 8.167 8.167 0 4.503-3.664 8.167-8.167 8.167z"/>
+                        </svg>
+                        <span className="font-mono text-[11px]" dir="ltr">{provider.phone_number}</span>
+                      </a>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-gray-400 bg-gray-50 px-2 py-0.5 rounded-md border border-gray-100">
+                        <Phone className="h-2.5 w-2.5 text-gray-300" />
+                        <span>لا يوجد هاتف</span>
+                      </span>
+                    )}
                   </div>
                 </div>
 

@@ -22,6 +22,7 @@ export interface ExperienceProvider {
   experienceType: string;
   capacity: number;
   verificationStatus: 'pending' | 'verified' | 'rejected';
+  phoneNumber?: string;
   matchScore?: number;
   description?: string;
   priceRange?: string;

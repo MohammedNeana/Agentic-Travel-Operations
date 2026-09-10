@@ -21,6 +21,7 @@ interface DbMatchedProvider {
   experience_type: string;
   capacity: number | null;
   verification_status: 'pending' | 'verified' | 'rejected';
+  phone_number?: string | null;
   similarity: number;
   match_score: number;
   reasons: string[];
@@ -102,6 +103,7 @@ export async function POST(request: NextRequest) {
         experienceType: row.experience_type,
         capacity: row.capacity ?? 10,
         verificationStatus: row.verification_status,
+        phoneNumber: row.phone_number || undefined,
         rating: 4.8,
         priceRange: '$$$',
       };

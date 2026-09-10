@@ -152,12 +152,12 @@ export async function POST(req: NextRequest) {
         if (ev.experienceProviderId) {
           const { data: providerData } = await supabase
             .from('experience_providers')
-            .select('name, phone')
+            .select('name, phone_number, phone')
             .eq('id', ev.experienceProviderId)
             .single();
 
           if (providerData) {
-            providerPhone = providerData.phone;
+            providerPhone = providerData.phone_number || providerData.phone || null;
             providerName = providerData.name || ev.title;
           }
         }
