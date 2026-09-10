@@ -47,6 +47,7 @@ export function SmartItineraryBuilder({
   const [isLoadingItinerary, setIsLoadingItinerary] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveFeedbackText, setSaveFeedbackText] = useState('تم الحفظ بنجاح');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   useEffect(() => {
@@ -223,8 +224,16 @@ export function SmartItineraryBuilder({
       const data = await res.json();
       if (data.success) {
         setHasUnsavedChanges(false);
+        const sentNotifs = (data.outboundNotifications || []).filter(
+          (n: { status: string }) => n.status === 'sent'
+        );
+        if (sentNotifs.length > 0) {
+          setSaveFeedbackText(`تم الحفظ وإرسال إشعار واتساب للمزود 📱`);
+        } else {
+          setSaveFeedbackText('تم الحفظ بنجاح');
+        }
         setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 3500);
+        setTimeout(() => setSaveSuccess(false), 4500);
       } else {
         alert(`فشل الحفظ: ${data.error || 'حدث خطأ غير متوقع'}`);
       }
@@ -301,7 +310,7 @@ export function SmartItineraryBuilder({
               ) : saveSuccess ? (
                 <>
                   <Check className="h-3.5 w-3.5" />
-                  <span>تم الحفظ بنجاح</span>
+                  <span>{saveFeedbackText}</span>
                 </>
               ) : (
                 <span>{ar.header.saveItinerary}</span>

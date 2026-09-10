@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { sendProviderNotification } from '@/lib/whatsapp/sender';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,7 +49,12 @@ export async function POST(req: NextRequest) {
     }
 
     const currentDbIds = (existingEvents || []).map((e) => e.id);
+    const existingDbIdSet = new Set(currentDbIds);
     const newEventIds = new Set(events.map((e) => e.id));
+
+    // Detect events that are genuinely newly added in this save action
+    const newlyAddedEvents = events.filter((ev) => !existingDbIdSet.has(ev.id));
+
 
     // 2. Delete events that were removed by the user in the UI
     const idsToDelete = currentDbIds.filter((id) => !newEventIds.has(id));
@@ -118,10 +124,69 @@ export async function POST(req: NextRequest) {
       .update({ updated_at: new Date().toISOString() })
       .eq('id', itineraryId);
 
+    // 5. Send outbound WhatsApp booking notifications for newly added events
+    const outboundNotifications: Array<{
+      eventId: string;
+      title: string;
+      recipientPhone?: string;
+      status: 'sent' | 'failed' | 'skipped';
+      messageId?: string;
+      error?: string;
+    }> = [];
+
+    if (newlyAddedEvents.length > 0) {
+      console.log(
+        `[Itinerary Save] 🔔 Detected ${newlyAddedEvents.length} newly added events. Triggering provider notifications...`
+      );
+
+      for (const ev of newlyAddedEvents) {
+        // Only notify planned events
+        if (ev.status && ev.status !== 'planned') {
+          continue;
+        }
+
+        let providerPhone: string | null = null;
+        let providerName: string = ev.title;
+
+        // Fetch experience provider phone from DB if available
+        if (ev.experienceProviderId) {
+          const { data: providerData } = await supabase
+            .from('experience_providers')
+            .select('name, phone')
+            .eq('id', ev.experienceProviderId)
+            .single();
+
+          if (providerData) {
+            providerPhone = providerData.phone;
+            providerName = providerData.name || ev.title;
+          }
+        }
+
+        const notifyResult = await sendProviderNotification(providerPhone || '', {
+          id: ev.id,
+          title: ev.title,
+          date: ev.eventDate,
+          time: ev.startTime,
+          providerName,
+        });
+
+        outboundNotifications.push({
+          eventId: ev.id,
+          title: ev.title,
+          recipientPhone: notifyResult.recipientPhone,
+          status: notifyResult.success ? 'sent' : 'failed',
+          messageId: notifyResult.messageId,
+          error: notifyResult.error,
+        });
+      }
+    }
+
     return NextResponse.json({
       success: true,
       message: 'Itinerary synchronized successfully',
       eventCount: events.length,
+      newEventsCount: newlyAddedEvents.length,
+      outboundNotifications,
     });
   } catch (error) {
     console.error('Error in POST /api/itineraries/save:', error);

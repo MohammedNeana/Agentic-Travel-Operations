@@ -142,3 +142,24 @@ export interface WebhookProcessingResult {
   details?: Record<string, unknown>;
   error?: string;
 }
+
+// ─── Outbound Notification Types ──────────────────────────────
+
+export interface ProviderNotificationDetails {
+  id?: string;
+  title: string;
+  date: string;
+  time?: string;
+  providerName?: string;
+  groupSize?: number;
+  notes?: string;
+}
+
+export interface OutboundNotificationResult {
+  success: boolean;
+  messageId?: string;
+  recipientPhone?: string;
+  error?: string;
+  mode?: 'interactive' | 'text' | 'template';
+}
+
