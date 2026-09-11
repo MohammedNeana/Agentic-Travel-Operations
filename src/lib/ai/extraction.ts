@@ -94,12 +94,12 @@ Rules:
 - "experience_type": Categorize the primary experience offered.
 - "capacity": Integer for max guest capacity. If unstated, infer a reasonable number (6–20) based on experience type.
 - "verification_status": Always "pending" for newly extracted providers.
-- "phone_number": Extract contact/WhatsApp number with country code. Return null if not mentioned.`;
+- "phone_number": If ANY contact phone number, mobile number, or WhatsApp number appears anywhere in the text (especially under the discovered contact numbers section or article), you MUST extract it and format it with country code (e.g. +9665XXXXXXXX). ONLY return null if absolutely no phone or WhatsApp number is mentioned.`;
 
-  // Candidate models: openai/gpt-oss-120b is confirmed active on this key, with fallbacks
+  // Candidate models: openai/gpt-oss-120b and qwen/qwen3.6-27b
   const candidateModels = [
     'openai/gpt-oss-120b',
-    'llama-3.3-70b-versatile',
+    'qwen/qwen3.6-27b',
     'llama-3.1-8b-instant',
   ];
 
@@ -131,10 +131,16 @@ Rules:
           `Groq extraction API (${currentModel}) failed [HTTP ${response.status}]: ${errorText}`
         );
 
-        // If decommissioned, model not found, or invalid request for this model, try next candidate
-        if (response.status === 400 || response.status === 404) {
-          console.warn(`[Groq Extraction] Model ${currentModel} returned HTTP ${response.status}, attempting next candidate model...`);
+        // If decommissioned (400), not found (404), or rate-limited (429), try next candidate model
+        if (response.status === 400 || response.status === 404 || response.status === 429) {
+          console.warn(
+            `[Groq Extraction] Model ${currentModel} returned HTTP ${response.status} (${response.status === 429 ? 'Rate Limit reached' : 'Model unavailable'}), attempting next candidate model...`
+          );
           lastError = err;
+          // Small jitter if rate-limited before trying next model
+          if (response.status === 429) {
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+          }
           continue;
         }
 
@@ -156,6 +162,25 @@ Rules:
 
       const parsedJson = JSON.parse(cleaned);
 
+      // Normalize phone and backfill if present in text
+      if (
+        !parsedJson.phone_number ||
+        parsedJson.phone_number === 'N/A' ||
+        parsedJson.phone_number === 'null' ||
+        parsedJson.phone_number === 'None'
+      ) {
+        parsedJson.phone_number = null;
+        const phoneMatch = textContent.match(/(?:\+?966|00966|0)?5\d{8}\b/);
+        if (phoneMatch && phoneMatch[0]) {
+          let num = phoneMatch[0].replace(/[^\d+]/g, '');
+          if (num.startsWith('05')) num = '+966' + num.slice(1);
+          else if (num.startsWith('5')) num = '+966' + num;
+          else if (num.startsWith('966')) num = '+' + num;
+          parsedJson.phone_number = num;
+          console.log('[Groq Extraction] 💡 Backfilled phone number from input text:', num);
+        }
+      }
+
       // Validate with Zod schema — strict type safety
       const validated = ExperienceProviderSchema.parse(parsedJson);
 
@@ -170,8 +195,12 @@ Rules:
       return validated;
     } catch (err: unknown) {
       lastError = err instanceof Error ? err : new Error(String(err));
-      // If it's a network or server error not related to model deprecation, propagate
-      if (!lastError.message.includes('HTTP 400') && !lastError.message.includes('HTTP 404')) {
+      // If it's a network or server error not related to model deprecation or rate limit, propagate
+      if (
+        !lastError.message.includes('HTTP 400') &&
+        !lastError.message.includes('HTTP 404') &&
+        !lastError.message.includes('HTTP 429')
+      ) {
         throw lastError;
       }
     }

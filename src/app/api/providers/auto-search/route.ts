@@ -87,132 +87,193 @@ async function searchWeb(query: string, maxResults = 3): Promise<string[]> {
 }
 
 /**
- * Scrapes clean, readable body text from a webpage using cheerio,
- * and autonomously crawls contact/about subpages to discover phone & WhatsApp numbers.
+ * Normalizes and formats Saudi phone / WhatsApp numbers with +966 country code.
  */
-async function scrapeUrlText(url: string): Promise<string | null> {
+function formatSaudiPhone(phone: string): string {
+  const digits = phone.replace(/[^\d+]/g, '');
+  if (digits.startsWith('+966')) return digits;
+  if (digits.startsWith('00966')) return '+' + digits.slice(2);
+  if (digits.startsWith('966')) return '+' + digits;
+  if (digits.startsWith('05')) return '+966' + digits.slice(1);
+  if (digits.startsWith('5') && digits.length === 9) return '+966' + digits;
+  return digits.startsWith('+') ? digits : '+' + digits;
+}
+
+/**
+ * Inspects a provider's official homepage or subpage for WhatsApp buttons,
+ * tel: links, and Saudi mobile number patterns.
+ */
+async function extractPhoneFromWebsite(websiteUrl: string): Promise<string | null> {
   try {
-    console.log(`[Auto-Search Agent] 📄 Scraping content from: ${url}`);
-    const response = await fetch(url, {
+    const cheerio = await import('cheerio');
+    const res = await fetch(websiteUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; ThereBot/1.0; Saudi DMC Discovery Agent)',
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         Accept: 'text/html,application/xhtml+xml',
         'Accept-Language': 'ar,en;q=0.9',
       },
-      signal: AbortSignal.timeout(12000),
+      signal: AbortSignal.timeout(8000),
     });
 
-    if (!response.ok) {
-      console.warn(`[Auto-Search Agent] HTTP ${response.status} fetching ${url}`);
-      return null;
-    }
-
-    const html = await response.text();
-    const cheerio = await import('cheerio');
+    if (!res.ok) return null;
+    const html = await res.text();
     const $ = cheerio.load(html);
 
-    // 1. Extract contact phones & WhatsApp links from the entire DOM (including header & footer)
-    const contactNumbers = new Set<string>();
-
-    $('a[href^="tel:"]').each((_, el) => {
-      const tel = $(el).attr('href')?.replace(/^tel:/i, '').trim();
-      if (tel) contactNumbers.add(tel);
-    });
-
+    // 1. Look for WhatsApp links (wa.me/966... or api.whatsapp.com/send?phone=...)
+    let foundPhone: string | null = null;
     $('a[href*="wa.me"], a[href*="whatsapp.com"]').each((_, el) => {
+      if (foundPhone) return;
       const href = $(el).attr('href') || '';
       const match = href.match(/(?:wa\.me\/|phone=)(\+?\d{8,15})/);
-      if (match && match[1]) contactNumbers.add(match[1]);
+      if (match && match[1]) {
+        foundPhone = match[1];
+      }
     });
 
-    const regexPhones = html.match(/(?:\+?966|00966|0)?5\d{8}\b/g);
-    if (regexPhones) {
-      for (const p of regexPhones) contactNumbers.add(p);
+    if (foundPhone) return formatSaudiPhone(foundPhone);
+
+    // 2. Look for tel: links
+    $('a[href^="tel:"]').each((_, el) => {
+      if (foundPhone) return;
+      const tel = $(el).attr('href')?.replace(/^tel:/i, '').trim();
+      if (tel && tel.replace(/[^\d]/g, '').length >= 8) {
+        foundPhone = tel;
+      }
+    });
+
+    if (foundPhone) return formatSaudiPhone(foundPhone);
+
+    // 3. Scan HTML for Saudi mobile numbers
+    const regexMatch = html.match(/(?:\+?966|00966|0)?5\d{8}\b/);
+    if (regexMatch && regexMatch[0]) {
+      return formatSaudiPhone(regexMatch[0]);
     }
 
-    // 2. If no phone found on landing page, autonomously discover and crawl the /contact-us subpage
-    if (contactNumbers.size === 0) {
-      let contactPageUrl: string | null = null;
+    // 4. Crawl /contact or /contact-us subpage if not found on homepage
+    let contactSubUrl: string | null = null;
+    $('a').each((_, el) => {
+      if (contactSubUrl) return;
+      const href = $(el).attr('href') || '';
+      if (/(?:contact|contact-us|اتصل|تواصل)/i.test(href)) {
+        try {
+          contactSubUrl = new URL(href, websiteUrl).href;
+        } catch {}
+      }
+    });
 
-      $('a').each((_, el) => {
-        if (contactPageUrl) return;
-        const href = $(el).attr('href');
-        const text = $(el).text().toLowerCase();
-        if (!href) return;
-
-        if (
-          /(?:contact|contact-us|contact_us|اتصل|تواصل)/i.test(href) ||
-          /(?:اتصل بنا|تواصل معنا|اتصل|contact us|contact)/i.test(text)
-        ) {
-          try {
-            contactPageUrl = new URL(href, url).href;
-          } catch {
-            // Invalid relative URL
-          }
-        }
+    if (contactSubUrl && contactSubUrl !== websiteUrl) {
+      const subRes = await fetch(contactSubUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+          Accept: 'text/html,application/xhtml+xml',
+        },
+        signal: AbortSignal.timeout(6000),
       });
 
-      if (contactPageUrl && contactPageUrl !== url) {
-        console.log(`[Auto-Search Agent] 📞 Crawling contact subpage: ${contactPageUrl}`);
-        try {
-          const contactRes = await fetch(contactPageUrl, {
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (compatible; ThereBot/1.0; Saudi DMC Discovery Agent)',
-              Accept: 'text/html,application/xhtml+xml',
-              'Accept-Language': 'ar,en;q=0.9',
-            },
-            signal: AbortSignal.timeout(8000),
-          });
+      if (subRes.ok) {
+        const subHtml = await subRes.text();
+        const $sub = cheerio.load(subHtml);
 
-          if (contactRes.ok) {
-            const contactHtml = await contactRes.text();
-            const $c = cheerio.load(contactHtml);
+        $sub('a[href*="wa.me"], a[href*="whatsapp.com"]').each((_, el) => {
+          if (foundPhone) return;
+          const href = $sub(el).attr('href') || '';
+          const match = href.match(/(?:wa\.me\/|phone=)(\+?\d{8,15})/);
+          if (match && match[1]) foundPhone = match[1];
+        });
+        if (foundPhone) return formatSaudiPhone(foundPhone);
 
-            $c('a[href^="tel:"]').each((_, el) => {
-              const tel = $c(el).attr('href')?.replace(/^tel:/i, '').trim();
-              if (tel) contactNumbers.add(tel);
-            });
+        $sub('a[href^="tel:"]').each((_, el) => {
+          if (foundPhone) return;
+          const tel = $sub(el).attr('href')?.replace(/^tel:/i, '').trim();
+          if (tel) foundPhone = tel;
+        });
+        if (foundPhone) return formatSaudiPhone(foundPhone);
 
-            $c('a[href*="wa.me"], a[href*="whatsapp.com"]').each((_, el) => {
-              const href = $c(el).attr('href') || '';
-              const match = href.match(/(?:wa\.me\/|phone=)(\+?\d{8,15})/);
-              if (match && match[1]) contactNumbers.add(match[1]);
-            });
-
-            const subPhones = contactHtml.match(/(?:\+?966|00966|0)?5\d{8}\b/g);
-            if (subPhones) {
-              for (const p of subPhones) contactNumbers.add(p);
-            }
-          }
-        } catch (contactErr) {
-          console.warn(`[Auto-Search Agent] Contact subpage crawl failed for ${contactPageUrl}:`, contactErr);
-        }
+        const subMatch = subHtml.match(/(?:\+?966|00966|0)?5\d{8}\b/);
+        if (subMatch && subMatch[0]) return formatSaudiPhone(subMatch[0]);
       }
     }
-
-    // 3. Remove script and style elements, but keep text content
-    $('script, style, iframe, noscript, svg').remove();
-
-    let text = $('body')
-      .text()
-      .replace(/\s+/g, ' ')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim()
-      .slice(0, 8000);
-
-    // 4. Inject discovered contact details so LLM extracts the phone number reliably
-    if (contactNumbers.size > 0) {
-      const phoneList = Array.from(contactNumbers).join(' | ');
-      console.log(`[Auto-Search Agent] 📱 Discovered contact numbers for ${url}:`, phoneList);
-      text += `\n\n--- بيانات التواصل وأرقام الهواتف والواتساب المكتشفة ---\nرقم هاتف / واتساب للتواصل: ${phoneList}`;
-    }
-
-    return text.length >= 50 ? text : null;
   } catch (err) {
-    console.warn(`[Auto-Search Agent] Failed scraping ${url}:`, err);
-    return null;
+    console.warn(`[Auto-Search Agent] Could not inspect website ${websiteUrl}:`, err);
   }
+
+  return null;
 }
+
+/**
+ * Resolves the official website and WhatsApp/phone for a provider when the search
+ * landed on an intermediary blog, magazine (e.g. TimeOut Riyadh), or directory.
+ */
+async function resolveProviderOfficialContact(
+  providerName: string,
+  city: string,
+  articleHtml?: string
+): Promise<string | null> {
+  const cheerio = await import('cheerio');
+
+  // Strategy 1: Look for external official website links in the article HTML
+  if (articleHtml) {
+    const $ = cheerio.load(articleHtml);
+    const candidateUrls: string[] = [];
+
+    const nameTokens = providerName
+      .toLowerCase()
+      .split(/[\s_-]+/)
+      .filter((t) => t.length >= 3 && !['and', 'the', 'for', 'في', 'من', 'إلى', 'رحلات', 'مخيم', 'شركة'].includes(t));
+
+    $('a').each((_, el) => {
+      const href = $(el).attr('href');
+      if (!href || !href.startsWith('http')) return;
+      try {
+        const parsed = new URL(href);
+        const hostname = parsed.hostname.toLowerCase();
+        if (
+          hostname.includes('facebook') ||
+          hostname.includes('twitter') ||
+          hostname.includes('instagram') ||
+          hostname.includes('timeout') ||
+          hostname.includes('google') ||
+          hostname.includes('tripadvisor') ||
+          hostname.includes('ootlah') ||
+          hostname.includes('travomint')
+        ) {
+          return;
+        }
+
+        const matchesName = nameTokens.some((tok) => hostname.includes(tok) || parsed.pathname.toLowerCase().includes(tok));
+        if (matchesName && !candidateUrls.includes(href)) {
+          candidateUrls.push(href);
+        }
+      } catch {}
+    });
+
+    for (const officialUrl of candidateUrls.slice(0, 2)) {
+      console.log(`[Auto-Search Agent] 🌐 Found official provider link from article: ${officialUrl}`);
+      const phone = await extractPhoneFromWebsite(officialUrl);
+      if (phone) return phone;
+    }
+  }
+
+  // Strategy 2: Autonomous targeted search for the provider's direct website & WhatsApp
+  try {
+    const targetedQuery = `"${providerName}" ${city} واتساب هاتف موقع`;
+    console.log(`[Auto-Search Agent] 🔍 Autonomous targeted search: "${targetedQuery}"`);
+    const directUrls = await searchWeb(targetedQuery, 2);
+
+    for (const directUrl of directUrls) {
+      console.log(`[Auto-Search Agent] 📞 Inspecting targeted website for WhatsApp/phone: ${directUrl}`);
+      const phone = await extractPhoneFromWebsite(directUrl);
+      if (phone) return phone;
+    }
+  } catch (err) {
+    console.warn(`[Auto-Search Agent] Targeted search error for ${providerName}:`, err);
+  }
+
+  return null;
+}
+
+
 
 /**
  * POST /api/providers/auto-search
@@ -276,14 +337,29 @@ export async function POST(request: NextRequest) {
 
     for (const url of targetUrls) {
       try {
-        const scrapedText = await scrapeUrlText(url);
-        if (!scrapedText) {
+        const scraped = await scrapeUrlText(url);
+        if (!scraped) {
           executionLogs.push({ url, status: 'skipped', reason: 'Empty or inaccessible page content' });
           continue;
         }
 
-        console.log(`[Auto-Search Agent] 🧠 Extracting provider from ${url} (${scrapedText.length} chars)`);
-        const extracted = await extractExperienceProvider(scrapedText);
+        console.log(`[Auto-Search Agent] 🧠 Extracting provider from ${url} (${scraped.text.length} chars)`);
+        const extracted = await extractExperienceProvider(scraped.text);
+
+        // Targeted Official Website & WhatsApp Resolution:
+        if (!extracted.phone_number) {
+          if (scraped.contactPhones.length > 0) {
+            extracted.phone_number = formatSaudiPhone(scraped.contactPhones[0]);
+            console.log(`[Auto-Search Agent] 📱 Applied discovered phone for "${extracted.name}":`, extracted.phone_number);
+          } else {
+            console.log(`[Auto-Search Agent] 🔎 Phone missing for "${extracted.name}". Inspecting official website / WhatsApp...`);
+            const resolvedPhone = await resolveProviderOfficialContact(extracted.name, extracted.city, scraped.rawHtml);
+            if (resolvedPhone) {
+              extracted.phone_number = resolvedPhone;
+              console.log(`[Auto-Search Agent] 🎯 Successfully resolved official phone for "${extracted.name}":`, resolvedPhone);
+            }
+          }
+        }
 
         console.log(`[Auto-Search Agent] ⚡ Generating 384d local embedding for: ${extracted.name}`);
         const embedding = await generateProviderEmbedding(extracted);
@@ -301,7 +377,14 @@ export async function POST(request: NextRequest) {
           source_url: url,
         });
 
-        executionLogs.push({ url, status: 'extracted', reason: `Identified: ${extracted.name}` });
+        executionLogs.push({
+          url,
+          status: 'extracted',
+          reason: `Identified: ${extracted.name} (${extracted.phone_number || 'No phone'})`,
+        });
+
+        // 1.2s pause between candidate evaluations to prevent token rate limits on free Groq tier
+        await new Promise((resolve) => setTimeout(resolve, 1200));
       } catch (loopError) {
         const errorMsg = loopError instanceof Error ? loopError.message : String(loopError);
         console.warn(`[Auto-Search Agent] Failed extracting from ${url}:`, errorMsg);
