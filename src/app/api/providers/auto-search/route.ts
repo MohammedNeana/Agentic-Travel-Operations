@@ -403,6 +403,8 @@ async function scrapeUrlText(
     return null;
   }
 }
+
+/**
  * POST /api/providers/auto-search
  *
  * Fully autonomous AI Sourcing loop:
