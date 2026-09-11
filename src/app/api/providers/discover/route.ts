@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic';
 
 interface DiscoverRequestBody {
   text_content?: string;
+  url?: string;
   tenant_id?: string;
 }
 
@@ -36,8 +37,9 @@ async function resolveTenantId(providedTenantId?: string): Promise<string> {
 /**
  * POST /api/providers/discover
  *
- * Ingests scraped text content of a Saudi experience provider, performs structured AI
- * extraction using Zod, generates a 1536-dimensional embedding using text-embedding-3-small,
+ * Ingests scraped text or a URL of a Saudi experience provider page.
+ * Performs structured AI extraction via Groq LLM (llama-3.1-70b-versatile),
+ * generates a 384-dimensional embedding using local @xenova/transformers,
  * and securely saves the provider to the Supabase experience_providers table.
  */
 export async function POST(request: NextRequest) {
@@ -52,21 +54,78 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const textContent = body.text_content;
-    if (!textContent || typeof textContent !== 'string' || textContent.trim().length === 0) {
+    let textContent = body.text_content?.trim() || '';
+    const targetUrl = body.url?.trim() || '';
+
+    // If a URL is provided, scrape it with cheerio
+    if (targetUrl) {
+      try {
+        console.log(`[Web Agent] 🌐 Scraping URL: ${targetUrl}`);
+        const scrapeResponse = await fetch(targetUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; ThereBot/1.0; DMC Discovery Agent)',
+            'Accept': 'text/html,application/xhtml+xml',
+            'Accept-Language': 'ar,en;q=0.9',
+          },
+          signal: AbortSignal.timeout(15000),
+        });
+
+        if (!scrapeResponse.ok) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: `Failed to fetch URL (HTTP ${scrapeResponse.status}): ${scrapeResponse.statusText}`,
+            },
+            { status: 400 }
+          );
+        }
+
+        const html = await scrapeResponse.text();
+
+        // Use cheerio to extract clean readable text
+        const cheerio = await import('cheerio');
+        const $ = cheerio.load(html);
+
+        // Remove non-content elements
+        $('script, style, nav, footer, header, iframe, noscript, svg, [role="navigation"]').remove();
+
+        // Extract clean text from body
+        const scrapedText = $('body').text()
+          .replace(/\s+/g, ' ')
+          .replace(/\n{3,}/g, '\n\n')
+          .trim()
+          .slice(0, 8000); // Cap at 8K chars to stay within LLM context limits
+
+        console.log(`[Web Agent] ✅ Scraped ${scrapedText.length} chars from ${targetUrl}`);
+
+        // Combine: scraped text takes priority, append any additional manual text
+        textContent = textContent
+          ? `${scrapedText}\n\n---\nAdditional context:\n${textContent}`
+          : scrapedText;
+      } catch (scrapeError) {
+        const message = scrapeError instanceof Error ? scrapeError.message : 'Unknown scraping error';
+        return NextResponse.json(
+          { success: false, error: `URL scraping failed: ${message}` },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Validate we have text content (from textarea or scraped URL)
+    if (!textContent || textContent.length === 0) {
       return NextResponse.json(
         {
           success: false,
-          error: 'Missing required field "text_content". Provide description or scraped text.',
+          error: 'Provide either "text_content" or a "url" to scrape.',
         },
         { status: 400 }
       );
     }
 
-    // 1. Structured AI Extraction (Zod verified)
+    // 1. Structured AI Extraction via Groq LLM (Zod verified)
     const extracted = await extractExperienceProvider(textContent);
 
-    // 2. Vector Embedding Generation (1536-dim text-embedding-3-small)
+    // 2. Vector Embedding Generation (384-dim local @xenova/transformers)
     const embedding = await generateProviderEmbedding(extracted);
 
     // 3. Resolve Tenant ID
@@ -108,6 +167,7 @@ export async function POST(request: NextRequest) {
         message: 'Experience provider successfully extracted and saved.',
         provider: insertedProvider,
         embedding_dimensions: embedding.length,
+        source: targetUrl ? 'url_scrape' : 'text_input',
       },
       { status: 201 }
     );

@@ -40,220 +40,111 @@ export const ExperienceProviderSchema = z.object({
 
 export type ExtractedExperienceProvider = z.infer<typeof ExperienceProviderSchema>;
 
-/**
- * Local heuristic extractor used when OpenAI API key is unavailable.
- */
-function heuristicExtract(text: string): ExtractedExperienceProvider {
-  // Extract potential capacity
-  const capacityMatch =
-    text.match(/(?:سعة|تتسع|يستوعب|تستوعب|لـ|حتى|بحد أقصى|سعتها|capacity(?:\s*of)?)\s*[:：]?\s*(\d{1,4})/i) ||
-    text.match(/(\d{1,3})\s*(?:شخص|أشخاص|ضيوف|ضيف|زائر|ركاب|guests|people|persons|pax)/i);
-  const capacity = capacityMatch ? parseInt(capacityMatch[1], 10) : 12;
-
-  // City detection in Saudi Arabia
-  const cities: Record<string, string> = {
-    العلا: 'العُلا',
-    العُلا: 'العُلا',
-    alula: 'العُلا',
-    الرياض: 'الرياض',
-    riyadh: 'الرياض',
-    جدة: 'جدة',
-    jeddah: 'جدة',
-    نيوم: 'نيوم',
-    neom: 'نيوم',
-    الدرعية: 'الرياض',
-    diriyah: 'الرياض',
-    الطائف: 'الطائف',
-    taif: 'الطائف',
-    أبها: 'أبها',
-    abha: 'أبها',
-    عسير: 'عسير',
-    tabuk: 'تبوك',
-    تبوك: 'تبوك',
-    ينبع: 'ينبع',
-    yanbu: 'ينبع',
-  };
-
-  let detectedCity = 'الرياض';
-  const lowerText = text.toLowerCase();
-  for (const [kw, city] of Object.entries(cities)) {
-    if (lowerText.includes(kw)) {
-      detectedCity = city;
-      break;
-    }
-  }
-
-  // Experience Type detection
-  let detectedType = 'تراث وثقافة';
-  if (/غوص|بحر|diving|sea|marine/i.test(text)) {
-    detectedType = 'مغامرات بحرية وغوص';
-  } else if (/سفاري|صحراء|مخيم|dune|desert|safari/i.test(text)) {
-    detectedType = 'سفاري صحراوي';
-  } else if (/طهي|طعام|أكل|طبخ|culinary|food|cooking/i.test(text)) {
-    detectedType = 'تجارب طهي وتذوق';
-  } else if (/تصوير|كاميرا|photography|photo/i.test(text)) {
-    detectedType = 'جولات تصوير فوتوغرافي';
-  } else if (/نجوم|فلك|stargazing|astronomy/i.test(text)) {
-    detectedType = 'رصد الفلك والنجوم';
-  }
-
-  // Phone number extraction (WhatsApp / Mobile)
-  let detectedPhone: string | null = null;
-  const keywordMatch = text.match(
-    /(?:واتساب|واتس|جوال|هاتف|تواصل|اتصال|رقم|موبايل|phone|whatsapp|mobile|tel)\s*[:：\-]?\s*(\+?[\d\s\-\(\)]{9,20})/i
-  );
-  if (keywordMatch && keywordMatch[1]) {
-    const cleaned = keywordMatch[1].replace(/[^\d+]/g, '');
-    if (cleaned.length >= 9 && cleaned.length <= 16) {
-      detectedPhone = cleaned;
-    }
-  }
-
-  if (!detectedPhone) {
-    const saudiMatch = text.match(/(?:\+?966|00966|0)?5\d{8}\b/);
-    if (saudiMatch && saudiMatch[0]) {
-      let num = saudiMatch[0].replace(/[^\d+]/g, '');
-      if (num.startsWith('05')) {
-        num = '+966' + num.slice(1);
-      } else if (num.startsWith('5')) {
-        num = '+966' + num;
-      } else if (num.startsWith('966')) {
-        num = '+' + num;
-      }
-      detectedPhone = num;
-    }
-  }
-
-  // Name extraction (first line or quoted or first words)
-  const lines = text.split(/[\n.]/).map((l) => l.trim()).filter(Boolean);
-  let name = lines[0] || 'مزود تجربة سياحية سعودي';
-  if (name.length > 50) {
-    name = name.substring(0, 47) + '...';
-  }
-
-  return {
-    name,
-    city: detectedCity,
-    experience_type: detectedType,
-    capacity,
-    verification_status: 'pending',
-    phone_number: detectedPhone,
+/** Groq API response shape */
+interface GroqChatCompletionResponse {
+  choices?: Array<{
+    message?: {
+      content?: string;
+    };
+  }>;
+  error?: {
+    message: string;
+    type?: string;
+    code?: string;
   };
 }
 
 /**
- * Extracts structured experience provider metadata from raw text using OpenAI Structured Outputs.
+ * Extracts structured experience provider metadata from raw text using
+ * Groq's LLM API (llama-3.1-70b-versatile).
+ *
+ * - Uses response_format: { type: 'json_object' } (Groq's OpenAI-compatible mode).
+ * - Validates output with Zod ExperienceProviderSchema.
+ * - NO fallback to heuristics or mock data. Fails loudly on error.
  */
 export async function extractExperienceProvider(
-  textContent: string,
-  apiKey = process.env.OPENAI_API_KEY
+  textContent: string
 ): Promise<ExtractedExperienceProvider> {
   if (!textContent || textContent.trim().length === 0) {
     throw new Error('text_content is required and cannot be empty.');
   }
 
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
-    console.warn(
-      'OPENAI_API_KEY is not configured in environment. Using intelligent local heuristic extraction.'
+    throw new Error(
+      'GROQ_API_KEY is not configured in .env.local. Real AI extraction requires a valid Groq API key. No fallback to fake data.'
     );
-    return heuristicExtract(textContent);
   }
 
-  const systemPrompt = `You are a Saudi DMC intelligence agent specializing in extracting structured profiles for local Saudi suppliers and experience providers from scraped web pages, brochures, or descriptions.
-Extract the details accurately in Arabic or English based on the input:
-- name: The commercial or operational name of the provider.
-- city: The Saudi city or destination (e.g. AlUla / العُلا, Riyadh / الرياض, Jeddah / جدة, NEOM / نيوم, Diriyah / الدرعية, etc.).
-- experience_type: The primary tourist experience category.
-- capacity: An integer representing the maximum guest capacity. If unstated, infer a reasonable capacity between 6 and 20 based on the experience type.
-- verification_status: Always set to "pending" for newly extracted providers.
-- phone_number: The contact or WhatsApp mobile number (e.g. +9665XXXXXXXX, 05XXXXXXXX). If not mentioned, return null.`;
+  const systemPrompt = `You are a Saudi DMC intelligence agent specializing in extracting structured profiles for local Saudi suppliers and experience providers from scraped web pages, brochures, social media posts, WhatsApp messages, or descriptions.
 
-  const jsonSchema = {
-    name: 'experience_provider',
-    strict: true,
-    schema: {
-      type: 'object',
-      properties: {
-        name: {
-          type: 'string',
-          description: 'Name of the provider or tour company',
-        },
-        city: {
-          type: 'string',
-          description: 'Saudi city or region of operation',
-        },
-        experience_type: {
-          type: 'string',
-          description: 'Category of the experience offered',
-        },
-        capacity: {
-          type: 'number',
-          description: 'Maximum guest capacity as an integer number',
-        },
-        verification_status: {
-          type: 'string',
-          enum: ['pending', 'verified', 'rejected'],
-          description: 'Initial verification status, default pending',
-        },
-        phone_number: {
-          type: ['string', 'null'],
-          description:
-            'Contact or WhatsApp mobile phone number of the provider, or null if not found in text',
-        },
-      },
-      required: [
-        'name',
-        'city',
-        'experience_type',
-        'capacity',
-        'verification_status',
-        'phone_number',
-      ],
-      additionalProperties: false,
+Extract the details accurately in Arabic or English based on the input. Respond ONLY with valid JSON in this exact structure:
+{
+  "name": "The commercial or operational name of the provider",
+  "city": "The Saudi city or destination (e.g. العُلا, الرياض, جدة, نيوم, الدرعية, الطائف, أبها)",
+  "experience_type": "The primary tourist experience category (e.g. تراث وثقافة, سفاري صحراوي, تجارب طهي, مغامرات وغوص, تصوير, فلك ونجوم)",
+  "capacity": 12,
+  "verification_status": "pending",
+  "phone_number": "+9665XXXXXXXX or null"
+}
+
+Rules:
+- "name": Extract the commercial/brand name. If unclear, derive a descriptive name from context.
+- "city": Must be a real Saudi city or region. Infer from context clues if not explicitly stated.
+- "experience_type": Categorize the primary experience offered.
+- "capacity": Integer for max guest capacity. If unstated, infer a reasonable number (6–20) based on experience type.
+- "verification_status": Always "pending" for newly extracted providers.
+- "phone_number": Extract contact/WhatsApp number with country code. Return null if not mentioned.`;
+
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
     },
-  };
+    body: JSON.stringify({
+      model: 'llama-3.1-70b-versatile',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `Extract the experience provider profile from this text:\n\n"${textContent}"` },
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.1,
+    }),
+  });
 
-  try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: textContent },
-        ],
-        response_format: {
-          type: 'json_schema',
-          json_schema: jsonSchema,
-        },
-        temperature: 0.1,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(
-        `OpenAI structured extraction failed (${response.status}): ${errorText}. Falling back to heuristic extractor.`
-      );
-      return heuristicExtract(textContent);
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
-
-    if (!content) {
-      return heuristicExtract(textContent);
-    }
-
-    const parsedJson = JSON.parse(content);
-    // Validate with Zod schema
-    return ExperienceProviderSchema.parse(parsedJson);
-  } catch (error) {
-    console.error('Error during OpenAI structured extraction, falling back to heuristic:', error);
-    return heuristicExtract(textContent);
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `Groq extraction API failed [HTTP ${response.status}]: ${errorText}`
+    );
   }
+
+  const data = (await response.json()) as GroqChatCompletionResponse;
+  const content = data.choices?.[0]?.message?.content;
+
+  if (!content) {
+    throw new Error('Groq LLM returned an empty response. No extraction possible.');
+  }
+
+  // Handle potential markdown code fences: ```json ... ```
+  const cleaned = content
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+
+  const parsedJson = JSON.parse(cleaned);
+
+  // Validate with Zod schema — strict type safety
+  const validated = ExperienceProviderSchema.parse(parsedJson);
+
+  console.log('[Groq Extraction] ✅ Successfully extracted provider:', {
+    name: validated.name,
+    city: validated.city,
+    type: validated.experience_type,
+    capacity: validated.capacity,
+    phone: validated.phone_number ?? 'N/A',
+  });
+
+  return validated;
 }
