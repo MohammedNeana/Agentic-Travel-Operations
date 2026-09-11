@@ -273,9 +273,136 @@ async function resolveProviderOfficialContact(
   return null;
 }
 
-
-
 /**
+ * Scrapes clean readable text and contact details from a webpage using cheerio.
+ */
+async function scrapeUrlText(
+  url: string
+): Promise<{ text: string; rawHtml: string; contactPhones: string[] } | null> {
+  try {
+    console.log(`[Auto-Search Agent] 📄 Scraping content from: ${url}`);
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml',
+        'Accept-Language': 'ar,en;q=0.9',
+      },
+      signal: AbortSignal.timeout(12000),
+    });
+
+    if (!response.ok) {
+      console.warn(`[Auto-Search Agent] HTTP ${response.status} fetching ${url}`);
+      return null;
+    }
+
+    const html = await response.text();
+    const cheerio = await import('cheerio');
+    const $ = cheerio.load(html);
+
+    // 1. Extract contact phones & WhatsApp links from the entire DOM
+    const contactNumbers = new Set<string>();
+
+    $('a[href^="tel:"]').each((_, el) => {
+      const tel = $(el).attr('href')?.replace(/^tel:/i, '').trim();
+      if (tel) contactNumbers.add(tel);
+    });
+
+    $('a[href*="wa.me"], a[href*="whatsapp.com"]').each((_, el) => {
+      const href = $(el).attr('href') || '';
+      const match = href.match(/(?:wa\.me\/|phone=)(\+?\d{8,15})/);
+      if (match && match[1]) contactNumbers.add(match[1]);
+    });
+
+    const regexPhones = html.match(/(?:\+?966|00966|0)?5\d{8}\b/g);
+    if (regexPhones) {
+      for (const p of regexPhones) contactNumbers.add(p);
+    }
+
+    // 2. If no phone found on landing page, check /contact-us subpage
+    if (contactNumbers.size === 0) {
+      let contactPageUrl: string | null = null;
+      $('a').each((_, el) => {
+        if (contactPageUrl) return;
+        const href = $(el).attr('href');
+        const text = $(el).text().toLowerCase();
+        if (!href) return;
+
+        if (
+          /(?:contact|contact-us|contact_us|اتصل|تواصل)/i.test(href) ||
+          /(?:اتصل بنا|تواصل معنا|اتصل|contact us|contact)/i.test(text)
+        ) {
+          try {
+            contactPageUrl = new URL(href, url).href;
+          } catch {}
+        }
+      });
+
+      if (contactPageUrl && contactPageUrl !== url) {
+        console.log(`[Auto-Search Agent] 📞 Crawling contact subpage: ${contactPageUrl}`);
+        try {
+          const contactRes = await fetch(contactPageUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+              Accept: 'text/html,application/xhtml+xml',
+            },
+            signal: AbortSignal.timeout(8000),
+          });
+
+          if (contactRes.ok) {
+            const contactHtml = await contactRes.text();
+            const $c = cheerio.load(contactHtml);
+
+            $c('a[href^="tel:"]').each((_, el) => {
+              const tel = $c(el).attr('href')?.replace(/^tel:/i, '').trim();
+              if (tel) contactNumbers.add(tel);
+            });
+
+            $c('a[href*="wa.me"], a[href*="whatsapp.com"]').each((_, el) => {
+              const href = $c(el).attr('href') || '';
+              const match = href.match(/(?:wa\.me\/|phone=)(\+?\d{8,15})/);
+              if (match && match[1]) contactNumbers.add(match[1]);
+            });
+
+            const subPhones = contactHtml.match(/(?:\+?966|00966|0)?5\d{8}\b/g);
+            if (subPhones) {
+              for (const p of subPhones) contactNumbers.add(p);
+            }
+          }
+        } catch (contactErr) {
+          console.warn(`[Auto-Search Agent] Contact subpage crawl failed for ${contactPageUrl}:`, contactErr);
+        }
+      }
+    }
+
+    // 3. Remove script and style elements
+    $('script, style, iframe, noscript, svg').remove();
+
+    let text = $('body')
+      .text()
+      .replace(/\s+/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+      .slice(0, 8000);
+
+    const contactPhoneList = Array.from(contactNumbers);
+    if (contactPhoneList.length > 0) {
+      console.log(`[Auto-Search Agent] 📱 Discovered contact numbers for ${url}:`, contactPhoneList.join(' | '));
+      text += `\n\n--- بيانات التواصل وأرقام الهواتف والواتساب المكتشفة ---\nرقم هاتف / واتساب للتواصل: ${contactPhoneList.join(' | ')}`;
+    }
+
+    if (text.length < 50) return null;
+
+    return {
+      text,
+      rawHtml: html,
+      contactPhones: contactPhoneList,
+    };
+  } catch (err) {
+    console.warn(`[Auto-Search Agent] Failed scraping ${url}:`, err);
+    return null;
+  }
+}
  * POST /api/providers/auto-search
  *
  * Fully autonomous AI Sourcing loop:
