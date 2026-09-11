@@ -35,80 +35,52 @@ async function resolveTenantId(providedTenantId?: string): Promise<string> {
 
 /**
  * Executes a broad web search using DuckDuckGo HTML parsing via cheerio
- * (and duck-duck-scrape when installed) to retrieve top external candidate URLs.
+ * to retrieve top external candidate URLs without requiring paid API keys.
  */
 async function searchWeb(query: string, maxResults = 3): Promise<string[]> {
   const urls: string[] = [];
 
-  // Try duck-duck-scrape if available
   try {
-    const { search, SafeSearchType } = await import('duck-duck-scrape');
-    console.log(`[Auto-Search Agent] 🔍 Searching via duck-duck-scrape for: "${query}"`);
-    const searchResults = await search(query, {
-      safeSearch: SafeSearchType.MODERATE,
+    const cheerio = await import('cheerio');
+    const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+    console.log(`[Auto-Search Agent] 🌐 Autonomous web search query: "${query}"`);
+
+    const response = await fetch(searchUrl, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml',
+        'Accept-Language': 'ar,en;q=0.9',
+      },
+      signal: AbortSignal.timeout(10000),
     });
 
-    if (searchResults.results && searchResults.results.length > 0) {
-      for (const res of searchResults.results) {
-        if (
-          res.url &&
-          res.url.startsWith('http') &&
-          !res.url.includes('duckduckgo.com') &&
-          !urls.includes(res.url)
-        ) {
-          urls.push(res.url);
-          if (urls.length >= maxResults) return urls;
-        }
-      }
-    }
-  } catch {
-    console.log('[Auto-Search Agent] ℹ️ Using direct web search parser via cheerio...');
-  }
+    if (response.ok) {
+      const html = await response.text();
+      const $ = cheerio.load(html);
 
-  // Fallback: Direct DuckDuckGo HTML search
-  if (urls.length < maxResults) {
-    try {
-      const cheerio = await import('cheerio');
-      const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
-      console.log(`[Auto-Search Agent] 🌐 Fetching search results from HTML engine: ${searchUrl}`);
-
-      const response = await fetch(searchUrl, {
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          Accept: 'text/html,application/xhtml+xml',
-          'Accept-Language': 'ar,en;q=0.9',
-        },
-        signal: AbortSignal.timeout(10000),
-      });
-
-      if (response.ok) {
-        const html = await response.text();
-        const $ = cheerio.load(html);
-
-        // Extract result links from DDG HTML
-        $('a.result__url, a.result__snippet, .web-result a').each((_, el) => {
-          let href = $(el).attr('href');
-          if (href) {
-            if (href.includes('uddg=')) {
-              const matches = href.match(/uddg=([^&]+)/);
-              if (matches && matches[1]) {
-                href = decodeURIComponent(matches[1]);
-              }
-            }
-            if (
-              href.startsWith('http') &&
-              !href.includes('duckduckgo.com') &&
-              !urls.includes(href)
-            ) {
-              urls.push(href);
+      // Extract result links from DDG HTML
+      $('a.result__url, a.result__snippet, .web-result a').each((_, el) => {
+        let href = $(el).attr('href');
+        if (href) {
+          if (href.includes('uddg=')) {
+            const matches = href.match(/uddg=([^&]+)/);
+            if (matches && matches[1]) {
+              href = decodeURIComponent(matches[1]);
             }
           }
-        });
-      }
-    } catch (err) {
-      console.warn('[Auto-Search Agent] Web HTML search encountered an error:', err);
+          if (
+            href.startsWith('http') &&
+            !href.includes('duckduckgo.com') &&
+            !urls.includes(href)
+          ) {
+            urls.push(href);
+          }
+        }
+      });
     }
+  } catch (err) {
+    console.warn('[Auto-Search Agent] Web HTML search encountered an error:', err);
   }
 
   return urls.slice(0, maxResults);

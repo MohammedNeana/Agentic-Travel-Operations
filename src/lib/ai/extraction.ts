@@ -96,55 +96,86 @@ Rules:
 - "verification_status": Always "pending" for newly extracted providers.
 - "phone_number": Extract contact/WhatsApp number with country code. Return null if not mentioned.`;
 
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: 'llama-3.1-70b-versatile',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Extract the experience provider profile from this text:\n\n"${textContent}"` },
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.1,
-    }),
-  });
+  // Candidate models: Groq decommissioned llama-3.1-70b-versatile, replaced by llama-3.3-70b-versatile
+  const candidateModels = [
+    'llama-3.3-70b-versatile',
+    'llama-3.1-8b-instant',
+    'openai/gpt-oss-120b',
+  ];
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `Groq extraction API failed [HTTP ${response.status}]: ${errorText}`
-    );
+  let lastError: Error | null = null;
+
+  for (const currentModel of candidateModels) {
+    try {
+      console.log(`[Groq Extraction] 🤖 Attempting extraction with model: ${currentModel}`);
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: currentModel,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `Extract the experience provider profile from this text:\n\n"${textContent}"` },
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.1,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        const err = new Error(
+          `Groq extraction API (${currentModel}) failed [HTTP ${response.status}]: ${errorText}`
+        );
+
+        // If decommissioned, model not found, or invalid request for this model, try next candidate
+        if (response.status === 400 || response.status === 404) {
+          console.warn(`[Groq Extraction] Model ${currentModel} returned HTTP ${response.status}, attempting next candidate model...`);
+          lastError = err;
+          continue;
+        }
+
+        throw err;
+      }
+
+      const data = (await response.json()) as GroqChatCompletionResponse;
+      const content = data.choices?.[0]?.message?.content;
+
+      if (!content) {
+        throw new Error(`Groq LLM (${currentModel}) returned an empty response.`);
+      }
+
+      // Handle potential markdown code fences: ```json ... ```
+      const cleaned = content
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .trim();
+
+      const parsedJson = JSON.parse(cleaned);
+
+      // Validate with Zod schema — strict type safety
+      const validated = ExperienceProviderSchema.parse(parsedJson);
+
+      console.log(`[Groq Extraction] ✅ Successfully extracted provider with ${currentModel}:`, {
+        name: validated.name,
+        city: validated.city,
+        type: validated.experience_type,
+        capacity: validated.capacity,
+        phone: validated.phone_number ?? 'N/A',
+      });
+
+      return validated;
+    } catch (err: unknown) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      // If it's a network or server error not related to model deprecation, propagate
+      if (!lastError.message.includes('HTTP 400') && !lastError.message.includes('HTTP 404')) {
+        throw lastError;
+      }
+    }
   }
 
-  const data = (await response.json()) as GroqChatCompletionResponse;
-  const content = data.choices?.[0]?.message?.content;
-
-  if (!content) {
-    throw new Error('Groq LLM returned an empty response. No extraction possible.');
-  }
-
-  // Handle potential markdown code fences: ```json ... ```
-  const cleaned = content
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/\s*```$/i, '')
-    .trim();
-
-  const parsedJson = JSON.parse(cleaned);
-
-  // Validate with Zod schema — strict type safety
-  const validated = ExperienceProviderSchema.parse(parsedJson);
-
-  console.log('[Groq Extraction] ✅ Successfully extracted provider:', {
-    name: validated.name,
-    city: validated.city,
-    type: validated.experience_type,
-    capacity: validated.capacity,
-    phone: validated.phone_number ?? 'N/A',
-  });
-
-  return validated;
+  throw lastError || new Error('Failed to extract provider with available Groq models.');
 }
