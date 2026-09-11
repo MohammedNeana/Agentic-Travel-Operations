@@ -96,11 +96,11 @@ Rules:
 - "verification_status": Always "pending" for newly extracted providers.
 - "phone_number": Extract contact/WhatsApp number with country code. Return null if not mentioned.`;
 
-  // Candidate models: Groq decommissioned llama-3.1-70b-versatile, replaced by llama-3.3-70b-versatile
+  // Candidate models: openai/gpt-oss-120b is confirmed active on this key, with fallbacks
   const candidateModels = [
+    'openai/gpt-oss-120b',
     'llama-3.3-70b-versatile',
     'llama-3.1-8b-instant',
-    'openai/gpt-oss-120b',
   ];
 
   let lastError: Error | null = null;

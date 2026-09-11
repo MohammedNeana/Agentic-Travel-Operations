@@ -82,19 +82,103 @@ export async function POST(request: NextRequest) {
 
         const html = await scrapeResponse.text();
 
-        // Use cheerio to extract clean readable text
+        // Use cheerio to extract clean readable text and contact details
         const cheerio = await import('cheerio');
         const $ = cheerio.load(html);
 
-        // Remove non-content elements
-        $('script, style, nav, footer, header, iframe, noscript, svg, [role="navigation"]').remove();
+        // 1. Extract contact phones & WhatsApp links from the entire DOM
+        const contactNumbers = new Set<string>();
+
+        $('a[href^="tel:"]').each((_, el) => {
+          const tel = $(el).attr('href')?.replace(/^tel:/i, '').trim();
+          if (tel) contactNumbers.add(tel);
+        });
+
+        $('a[href*="wa.me"], a[href*="whatsapp.com"]').each((_, el) => {
+          const href = $(el).attr('href') || '';
+          const match = href.match(/(?:wa\.me\/|phone=)(\+?\d{8,15})/);
+          if (match && match[1]) contactNumbers.add(match[1]);
+        });
+
+        const regexPhones = html.match(/(?:\+?966|00966|0)?5\d{8}\b/g);
+        if (regexPhones) {
+          for (const p of regexPhones) contactNumbers.add(p);
+        }
+
+        // 2. If no phone found on landing page, autonomously discover and crawl the /contact-us subpage
+        if (contactNumbers.size === 0) {
+          let contactPageUrl: string | null = null;
+          $('a').each((_, el) => {
+            if (contactPageUrl) return;
+            const href = $(el).attr('href');
+            const text = $(el).text().toLowerCase();
+            if (!href) return;
+
+            if (
+              /(?:contact|contact-us|contact_us|اتصل|تواصل)/i.test(href) ||
+              /(?:اتصل بنا|تواصل معنا|اتصل|contact us|contact)/i.test(text)
+            ) {
+              try {
+                contactPageUrl = new URL(href, targetUrl).href;
+              } catch {
+                // Invalid relative URL
+              }
+            }
+          });
+
+          if (contactPageUrl && contactPageUrl !== targetUrl) {
+            console.log(`[Web Agent] 📞 Crawling contact subpage: ${contactPageUrl}`);
+            try {
+              const contactRes = await fetch(contactPageUrl, {
+                headers: {
+                  'User-Agent': 'Mozilla/5.0 (compatible; ThereBot/1.0; DMC Discovery Agent)',
+                  Accept: 'text/html,application/xhtml+xml',
+                  'Accept-Language': 'ar,en;q=0.9',
+                },
+                signal: AbortSignal.timeout(8000),
+              });
+
+              if (contactRes.ok) {
+                const contactHtml = await contactRes.text();
+                const $c = cheerio.load(contactHtml);
+
+                $c('a[href^="tel:"]').each((_, el) => {
+                  const tel = $c(el).attr('href')?.replace(/^tel:/i, '').trim();
+                  if (tel) contactNumbers.add(tel);
+                });
+
+                $c('a[href*="wa.me"], a[href*="whatsapp.com"]').each((_, el) => {
+                  const href = $c(el).attr('href') || '';
+                  const match = href.match(/(?:wa\.me\/|phone=)(\+?\d{8,15})/);
+                  if (match && match[1]) contactNumbers.add(match[1]);
+                });
+
+                const subPhones = contactHtml.match(/(?:\+?966|00966|0)?5\d{8}\b/g);
+                if (subPhones) {
+                  for (const p of subPhones) contactNumbers.add(p);
+                }
+              }
+            } catch (contactErr) {
+              console.warn(`[Web Agent] Contact subpage crawl failed:`, contactErr);
+            }
+          }
+        }
+
+        // 3. Remove scripts and styles
+        $('script, style, iframe, noscript, svg').remove();
 
         // Extract clean text from body
-        const scrapedText = $('body').text()
+        let scrapedText = $('body').text()
           .replace(/\s+/g, ' ')
           .replace(/\n{3,}/g, '\n\n')
           .trim()
-          .slice(0, 8000); // Cap at 8K chars to stay within LLM context limits
+          .slice(0, 8000);
+
+        if (contactNumbers.size > 0) {
+          const phoneList = Array.from(contactNumbers).join(' | ');
+          console.log(`[Web Agent] 📱 Discovered contact numbers:`, phoneList);
+          scrapedText += `\n\n--- بيانات التواصل وأرقام الهواتف والواتساب المكتشفة ---\nرقم هاتف / واتساب للتواصل: ${phoneList}`;
+        }
 
         console.log(`[Web Agent] ✅ Scraped ${scrapedText.length} chars from ${targetUrl}`);
 
