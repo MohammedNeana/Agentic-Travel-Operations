@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { extractExperienceProvider } from '@/lib/ai/extraction';
 import { generateProviderEmbedding } from '@/lib/ai/embeddings';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { safeFetch } from '@/lib/security/ssrf';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,12 +12,25 @@ interface DiscoverRequestBody {
   tenant_id?: string;
 }
 
-async function resolveTenantId(providedTenantId?: string): Promise<string> {
-  if (providedTenantId && providedTenantId.trim().length > 0) {
-    return providedTenantId.trim();
+async function resolveTenantId(request: NextRequest, providedTenantId?: string): Promise<string> {
+  const supabase = createServerSupabaseClient();
+  const authHeader = request.headers.get('authorization');
+
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.replace('Bearer ', '').trim();
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (user?.id) {
+      const { data: profile } = await supabase
+        .from('users')
+        .select('tenant_id')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (profile?.tenant_id) {
+        return profile.tenant_id;
+      }
+    }
   }
 
-  const supabase = createServerSupabaseClient();
   const { data } = await supabase
     .from('organizations')
     .select('tenant_id')
@@ -26,6 +40,10 @@ async function resolveTenantId(providedTenantId?: string): Promise<string> {
 
   if (org?.tenant_id) {
     return org.tenant_id;
+  }
+
+  if (providedTenantId && providedTenantId.trim().length > 0) {
+    return providedTenantId.trim();
   }
 
   throw new Error('Tenant ID could not be resolved from active session or database.');
@@ -48,7 +66,7 @@ export async function POST(request: NextRequest) {
 
     if (targetUrl) {
       try {
-        const scrapeResponse = await fetch(targetUrl, {
+        const scrapeResponse = await safeFetch(targetUrl, {
           headers: {
             'User-Agent': 'Mozilla/5.0 (compatible; ThereBot/1.0; DMC Discovery Agent)',
             'Accept': 'text/html,application/xhtml+xml',
@@ -110,7 +128,7 @@ export async function POST(request: NextRequest) {
 
           if (contactPageUrl && contactPageUrl !== targetUrl) {
             try {
-              const contactRes = await fetch(contactPageUrl, {
+              const contactRes = await safeFetch(contactPageUrl, {
                 headers: {
                   'User-Agent': 'Mozilla/5.0 (compatible; ThereBot/1.0; DMC Discovery Agent)',
                   Accept: 'text/html,application/xhtml+xml',
@@ -180,7 +198,7 @@ export async function POST(request: NextRequest) {
 
     const extracted = await extractExperienceProvider(textContent);
     const embedding = await generateProviderEmbedding(extracted);
-    const tenantId = await resolveTenantId(body.tenant_id);
+    const tenantId = await resolveTenantId(request, body.tenant_id);
 
     const supabase = createServerSupabaseClient();
     const { data: insertedProvider, error: insertError } = await supabase

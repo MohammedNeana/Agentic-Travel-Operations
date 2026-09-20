@@ -37,7 +37,24 @@ export async function POST(request: NextRequest) {
     const interests = Array.isArray(body.interests) ? body.interests : ['تراث وثقافة', 'سفاري صحراوي'];
     const destinations = Array.isArray(body.destinations) ? body.destinations : ['العُلا', 'الرياض'];
     const supabase = createServerSupabaseClient();
-    let tenantId = body.tenant_id?.trim();
+    let tenantId: string | undefined;
+
+    const authHeader = request.headers.get('authorization');
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.replace('Bearer ', '').trim();
+      const { data: { user } } = await supabase.auth.getUser(token);
+      if (user?.id) {
+        const { data: profile } = await supabase
+          .from('users')
+          .select('tenant_id')
+          .eq('id', user.id)
+          .maybeSingle();
+        if (profile?.tenant_id) {
+          tenantId = profile.tenant_id;
+        }
+      }
+    }
+
     if (!tenantId) {
       const { data } = await supabase
         .from('organizations')
@@ -46,6 +63,10 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
       const org = data as { tenant_id?: string } | null;
       tenantId = org?.tenant_id;
+    }
+
+    if (!tenantId && body.tenant_id?.trim()) {
+      tenantId = body.tenant_id.trim();
     }
     if (!tenantId) {
       return NextResponse.json(

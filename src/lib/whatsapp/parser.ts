@@ -14,10 +14,14 @@ export function validateVerificationChallenge(
   const token = searchParams.get('hub.verify_token');
   const challenge = searchParams.get('hub.challenge');
 
-  if (mode === 'subscribe' && token && challenge) {
-    if (!configuredVerifyToken || token === configuredVerifyToken) {
-      return { isValid: true, challenge };
-    }
+  if (
+    mode === 'subscribe' &&
+    token &&
+    challenge &&
+    configuredVerifyToken &&
+    token === configuredVerifyToken
+  ) {
+    return { isValid: true, challenge };
   }
 
   return { isValid: false, challenge: null };
@@ -29,7 +33,7 @@ export function verifyWebhookSignature(
   appSecret = process.env.WHATSAPP_APP_SECRET
 ): boolean {
   if (!appSecret || appSecret === 'your_whatsapp_app_secret_here' || appSecret.trim() === '') {
-    return true;
+    return false;
   }
 
   if (!signatureHeader) {

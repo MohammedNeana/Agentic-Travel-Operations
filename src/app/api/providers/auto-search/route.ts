@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { extractExperienceProvider } from '@/lib/ai/extraction';
 import { generateProviderEmbedding } from '@/lib/ai/embeddings';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { safeFetch } from '@/lib/security/ssrf';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,12 +12,25 @@ interface AutoSearchRequestBody {
   max_results?: number;
 }
 
-async function resolveTenantId(providedTenantId?: string): Promise<string> {
-  if (providedTenantId && providedTenantId.trim().length > 0) {
-    return providedTenantId.trim();
+async function resolveTenantId(request: NextRequest, providedTenantId?: string): Promise<string> {
+  const supabase = createServerSupabaseClient();
+  const authHeader = request.headers.get('authorization');
+
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.replace('Bearer ', '').trim();
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (user?.id) {
+      const { data: profile } = await supabase
+        .from('users')
+        .select('tenant_id')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (profile?.tenant_id) {
+        return profile.tenant_id;
+      }
+    }
   }
 
-  const supabase = createServerSupabaseClient();
   const { data } = await supabase
     .from('organizations')
     .select('tenant_id')
@@ -26,6 +40,10 @@ async function resolveTenantId(providedTenantId?: string): Promise<string> {
 
   if (org?.tenant_id) {
     return org.tenant_id;
+  }
+
+  if (providedTenantId && providedTenantId.trim().length > 0) {
+    return providedTenantId.trim();
   }
 
   throw new Error('Tenant ID could not be resolved from active session or database.');
@@ -89,7 +107,7 @@ function formatSaudiPhone(phone: string): string {
 async function extractPhoneFromWebsite(websiteUrl: string): Promise<string | null> {
   try {
     const cheerio = await import('cheerio');
-    const res = await fetch(websiteUrl, {
+    const res = await safeFetch(websiteUrl, {
       headers: {
         'User-Agent':
           'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -142,7 +160,7 @@ async function extractPhoneFromWebsite(websiteUrl: string): Promise<string | nul
     });
 
     if (contactSubUrl && contactSubUrl !== websiteUrl) {
-      const subRes = await fetch(contactSubUrl, {
+      const subRes = await safeFetch(contactSubUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
           Accept: 'text/html,application/xhtml+xml',
@@ -243,7 +261,7 @@ async function scrapeUrlText(
   url: string
 ): Promise<{ text: string; rawHtml: string; contactPhones: string[] } | null> {
   try {
-    const response = await fetch(url, {
+    const response = await safeFetch(url, {
       headers: {
         'User-Agent':
           'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -381,7 +399,7 @@ export async function POST(request: NextRequest) {
     }
 
     const maxResults = Math.min(Math.max(body.max_results || 3, 1), 5);
-    const tenantId = await resolveTenantId(body.tenant_id);
+    const tenantId = await resolveTenantId(request, body.tenant_id);
 
     const targetUrls = await searchWeb(query, maxResults);
 
