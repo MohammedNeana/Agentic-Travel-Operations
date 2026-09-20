@@ -17,6 +17,7 @@ import {
 } from '@/lib/whatsapp/events';
 import { sendWhatsAppTextMessage } from '@/lib/whatsapp/sender';
 import { orchestrateItineraryCascade } from '@/lib/whatsapp/orchestrator';
+import { isMessageProcessed, markMessageProcessed } from '@/lib/whatsapp/idempotency';
 
 export const dynamic = 'force-dynamic';
 
@@ -67,6 +68,18 @@ export async function POST(request: NextRequest) {
     const processingResults: WebhookProcessingResult[] = [];
 
     for (const msg of messages) {
+      if (await isMessageProcessed(msg.messageId)) {
+        processingResults.push({
+          success: true,
+          messageId: msg.messageId,
+          actionTaken: 'no_action_needed',
+          details: { reason: 'duplicate_delivery_ignored' },
+        });
+        continue;
+      }
+
+      await markMessageProcessed(msg.messageId);
+
       if (msg.action?.type === 'accept_booking') {
         const updateResult = await confirmItineraryEvent(msg.action.eventId);
 

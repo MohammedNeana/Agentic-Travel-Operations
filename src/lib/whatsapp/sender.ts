@@ -59,7 +59,7 @@ export async function sendWhatsAppTextMessage(
 ): Promise<OutboundNotificationResult> {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-  const apiVersion = process.env.WHATSAPP_GRAPH_API_VERSION || 'v17.0';
+  const apiVersion = process.env.WHATSAPP_GRAPH_API_VERSION || 'v21.0';
 
   if (!accessToken) {
     return { success: false, error: 'WHATSAPP_ACCESS_TOKEN is missing in environment variables.' };
