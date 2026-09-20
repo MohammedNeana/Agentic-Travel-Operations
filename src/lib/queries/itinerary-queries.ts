@@ -87,7 +87,6 @@ export async function getExperienceProviders(): Promise<ExperienceProvider[]> {
     .order('created_at', { ascending: true });
 
   if (error) {
-    console.error('Error fetching experience providers:', error);
     return [];
   }
 
@@ -108,7 +107,6 @@ export async function getActiveItinerary(travelerId?: string): Promise<Itinerary
     .single();
 
   if ((itError || !itineraryData) && travelerId) {
-    // If not found by traveler_profile_id, fall back to first itinerary
     const fallback = await supabase
       .from('itineraries')
       .select('*')
@@ -120,7 +118,6 @@ export async function getActiveItinerary(travelerId?: string): Promise<Itinerary
   }
 
   if (itError || !itineraryData) {
-    console.error('Error fetching itinerary:', itError);
     return null;
   }
 
@@ -130,10 +127,6 @@ export async function getActiveItinerary(travelerId?: string): Promise<Itinerary
     .eq('itinerary_id', itineraryData.id)
     .order('event_date', { ascending: true })
     .order('sort_order', { ascending: true });
-
-  if (evError) {
-    console.error('Error fetching events:', evError);
-  }
 
   const events: ItineraryEvent[] = ((eventsData as DbItineraryEvent[]) || []).map((ev) => ({
     id: ev.id,
@@ -191,7 +184,6 @@ export async function getTravelerProfiles(
     .order('created_at', { ascending: true });
 
   if (error) {
-    console.error('Error fetching traveler profiles:', error);
     return [];
   }
 
@@ -221,18 +213,15 @@ export async function getSmartMatchRecommendations(
 
     const budgetInfo = profile?.budgetTier ? `الميزانية: ${profile.budgetTier}` : '';
     const queryText = `اهتمامات الزائر: ${interests.join('، ')} ${budgetInfo ? '| ' + budgetInfo : ''}`;
-    console.log(`\x1b[34m[Itinerary Queries]\x1b[0m 🔍 Querying recommendations for traveler: "${profile?.name ?? 'Default'}"`);
 
     const supabase = createServerSupabaseClient();
 
-    // Check if any providers have NULL embeddings and backfill them
     const { data: unindexedProviders } = await supabase
       .from('experience_providers')
       .select('id, name, city, experience_type, capacity, verification_status')
       .is('embedding', null);
 
     if (unindexedProviders && unindexedProviders.length > 0) {
-      console.log(`\x1b[33m[Itinerary Queries]\x1b[0m ⚙️ Auto-backfilling 384-d embeddings for ${unindexedProviders.length} providers...`);
       for (const p of unindexedProviders) {
         const emb = await generateProviderEmbedding({
           name: p.name,
@@ -246,10 +235,8 @@ export async function getSmartMatchRecommendations(
           .update({ embedding: JSON.stringify(emb) })
           .eq('id', p.id);
       }
-      console.log(`\x1b[32m[Itinerary Queries]\x1b[0m ✅ Backfilled embeddings for all providers.`);
     }
 
-    // Generate real 384-dimensional vector embedding for traveler preferences
     const queryEmbedding = await generateTextEmbedding(queryText);
 
     const { data: rows, error } = await supabase.rpc('match_providers_hybrid', {
@@ -261,8 +248,6 @@ export async function getSmartMatchRecommendations(
     });
 
     if (error) {
-      console.error('Error in match_providers_hybrid RPC:', error);
-      // Fall back to direct providers query if RPC encounters an issue
       const providers = await getExperienceProviders();
       return providers
         .filter((p) => p.verificationStatus === 'verified')
@@ -273,8 +258,6 @@ export async function getSmartMatchRecommendations(
           reasons: ['مزود تجارب محلي معتمد', `مناسب لرحلات ${p.city}`],
         }));
     }
-
-    console.log(`\x1b[34m[Itinerary Queries]\x1b[0m 📊 Received ${rows?.length ?? 0} hybrid matched providers from Supabase pgvector.`);
 
     interface DbMatchedRow {
       id: string;
@@ -312,8 +295,7 @@ export async function getSmartMatchRecommendations(
           reasons: Array.isArray(m.reasons) ? m.reasons : ['تطابق مع تفضيلات الرحلة'],
         };
       });
-  } catch (err) {
-    console.error('Failed to get smart match recommendations:', err);
+  } catch {
     return [];
   }
 }

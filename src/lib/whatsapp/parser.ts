@@ -6,13 +6,6 @@ import type {
   ParsedAudioMessage,
 } from './types';
 
-/**
- * Validates the WhatsApp GET webhook verification handshake.
- * When configuring the webhook in the Meta Developer Portal, Meta sends:
- * - hub.mode ('subscribe')
- * - hub.verify_token (configured secret token)
- * - hub.challenge (string to echo back with HTTP 200)
- */
 export function validateVerificationChallenge(
   searchParams: URLSearchParams,
   configuredVerifyToken = process.env.WHATSAPP_VERIFY_TOKEN
@@ -30,17 +23,12 @@ export function validateVerificationChallenge(
   return { isValid: false, challenge: null };
 }
 
-/**
- * Validates WhatsApp X-Hub-Signature-256 header using HMAC-SHA256.
- * Returns true if valid or if no secret is configured (dev/demo mode).
- */
 export function verifyWebhookSignature(
   rawBody: string,
   signatureHeader: string | null,
   appSecret = process.env.WHATSAPP_APP_SECRET
 ): boolean {
   if (!appSecret || appSecret === 'your_whatsapp_app_secret_here' || appSecret.trim() === '') {
-    // If no secret or placeholder configured in environment, skip signature verification in dev
     return true;
   }
 
@@ -63,15 +51,11 @@ export function verifyWebhookSignature(
       Buffer.from(hash, 'hex'),
       Buffer.from(expectedHash, 'hex')
     );
-  } catch (error) {
-    console.error('Signature verification error:', error);
+  } catch {
     return false;
   }
 }
 
-/**
- * Extracts and normalizes incoming messages from WhatsApp Cloud API webhook payload.
- */
 export function extractWhatsAppMessages(
   payload: WhatsAppWebhookPayload
 ): ParsedMessageContext[] {
@@ -99,7 +83,6 @@ export function extractWhatsAppMessages(
         let action: ParsedButtonAction | undefined;
         let audio: ParsedAudioMessage | undefined;
 
-        // 1. Interactive Button Reply
         if (msg.type === 'interactive' && msg.interactive) {
           const btnReply = msg.interactive.button_reply;
           const listReply = msg.interactive.list_reply;
@@ -127,7 +110,6 @@ export function extractWhatsAppMessages(
           }
         }
 
-        // 2. Audio Message
         if (msg.type === 'audio' && msg.audio) {
           audio = {
             type: 'audio',
@@ -137,7 +119,6 @@ export function extractWhatsAppMessages(
           };
         }
 
-        // 3. Text Message Body
         const textBody = msg.text?.body ? msg.text.body.trim() : undefined;
 
         parsedMessages.push({

@@ -1,17 +1,11 @@
 import type { ItineraryEvent, ScheduleWarning, TravelerProfile } from '@/types/itinerary';
 
-/**
- * Pure calculation function to detect schedule warnings based on real event dates/times,
- * traveler group size, accessibility requirements, and operational voice note escalations.
- * 100% dynamic without static string pushes.
- */
 export function detectScheduleWarnings(
   events: ItineraryEvent[],
   profile?: TravelerProfile | null
 ): ScheduleWarning[] {
   const warnings: ScheduleWarning[] = [];
 
-  // 1. Time Conflict Warning: Detect real time overlap on the same day
   for (let i = 0; i < events.length; i++) {
     for (let j = i + 1; j < events.length; j++) {
       const e1 = events[i];
@@ -35,7 +29,6 @@ export function detectScheduleWarnings(
     }
   }
 
-  // 2. Operational Escalation Warning: Triggered when an event is escalated (e.g. from WhatsApp voice note)
   for (const ev of events) {
     if (ev.status === 'escalated') {
       const reasonText = ev.escalationReason || 'تأخير في الموعد أو طارئ يتطلب تدخل فريق العمليات';
@@ -50,7 +43,6 @@ export function detectScheduleWarnings(
     }
   }
 
-  // 3. Dynamic Capacity Warning: Compare traveler group size against event provider capacity
   if (profile?.groupSize) {
     for (const ev of events) {
       if (ev.status === 'cancelled') continue;
@@ -77,7 +69,6 @@ export function detectScheduleWarnings(
     }
   }
 
-  // 4. Dynamic Accessibility Warning: Only if traveler mobilityNotes indicate physical/wheelchair constraints
   if (profile?.mobilityNotes) {
     const hasMobilityConstraint = /كرسي|كراسي|تنقل|إعاقة|مريح|wheelchair|mobility/i.test(
       profile.mobilityNotes

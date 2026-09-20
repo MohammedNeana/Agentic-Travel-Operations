@@ -88,7 +88,6 @@ export default function ForecastingPage() {
         setErrorMessage(data.error || 'فشل توليد التنبؤ عبر نموذج الذكاء الاصطناعي.');
       }
     } catch (err) {
-      console.error('Failed to fetch demand forecast:', err);
       setErrorMessage(err instanceof Error ? err.message : 'خطأ في الاتصال بالشبكة.');
     } finally {
       setIsLoading(false);
@@ -97,7 +96,6 @@ export default function ForecastingPage() {
 
   useEffect(() => {
     fetchForecast();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleCustomScenarioSubmit = (e: React.FormEvent) => {
@@ -107,7 +105,6 @@ export default function ForecastingPage() {
 
   return (
     <div className="min-h-screen bg-gray-50/50 pb-16">
-      {/* Top Header */}
       <div className="border-b border-gray-100 bg-white/90 backdrop-blur-md sticky top-[57px] z-20">
         <div className="mx-auto flex max-w-screen-2xl items-center justify-between px-6 py-4">
           <div>
@@ -147,9 +144,7 @@ export default function ForecastingPage() {
       </div>
 
       <div className="mx-auto max-w-screen-2xl px-6 pt-6 space-y-6">
-        {/* Controls Card */}
         <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-xs space-y-5">
-          {/* City Selection */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-xs font-bold text-gray-700">
@@ -216,7 +211,6 @@ export default function ForecastingPage() {
             )}
           </div>
 
-          {/* Season & Traveler Segment */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-gray-100">
             <div>
               <label className="text-xs font-bold text-gray-700 flex items-center gap-1.5 mb-1.5">
@@ -261,7 +255,6 @@ export default function ForecastingPage() {
             </div>
           </div>
 
-          {/* Interactive Custom Scenario Simulation Bar */}
           <form onSubmit={handleCustomScenarioSubmit} className="pt-2 border-t border-gray-100">
             <label className="text-xs font-bold text-gray-700 flex items-center gap-1.5 mb-1.5">
               <Sparkles className="h-3.5 w-3.5 text-violet-600" />
@@ -287,7 +280,6 @@ export default function ForecastingPage() {
           </form>
         </div>
 
-        {/* Error Alert */}
         {errorMessage && (
           <div className="flex items-start gap-3 rounded-2xl bg-red-50 p-4 border border-red-200">
             <AlertTriangle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
@@ -305,7 +297,6 @@ export default function ForecastingPage() {
           </div>
         )}
 
-        {/* Loading State */}
         {isLoading && (
           <div className="flex flex-col items-center justify-center p-16 bg-white rounded-2xl border border-gray-100 shadow-xs">
             <Loader2 className="h-8 w-8 animate-spin text-violet-600 mb-3" />
@@ -316,10 +307,8 @@ export default function ForecastingPage() {
           </div>
         )}
 
-        {/* Forecast Content */}
         {!isLoading && forecast && (
           <div className="space-y-6">
-            {/* 4 Metric Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-xs">
                 <div className="flex items-center justify-between text-gray-500 mb-2">
@@ -389,7 +378,6 @@ export default function ForecastingPage() {
               </div>
             </div>
 
-            {/* Executive Summary by AI */}
             <div className="bg-gradient-to-br from-violet-950 via-slate-900 to-gray-900 rounded-2xl p-6 text-white shadow-md space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-violet-300 text-xs font-bold">
@@ -405,9 +393,7 @@ export default function ForecastingPage() {
               </p>
             </div>
 
-            {/* Two-Column Detail Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-              {/* Critical Supplier Shortages */}
               <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-xs space-y-4">
                 <div className="flex items-center gap-2">
                   <AlertTriangle className="h-4 w-4 text-red-600" />
@@ -436,7 +422,6 @@ export default function ForecastingPage() {
                   ))}
                 </div>
 
-                {/* Key Demand Drivers */}
                 <div className="pt-3 border-t border-gray-100 space-y-2">
                   <h4 className="text-xs font-bold text-gray-700">محرّكات التدفق الرئيسية المرصودة:</h4>
                   <ul className="space-y-1.5">
@@ -450,9 +435,7 @@ export default function ForecastingPage() {
                 </div>
               </div>
 
-              {/* Strategy Recommendations & Quarterly Forecast */}
               <div className="space-y-6">
-                {/* Recommendations */}
                 <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-xs space-y-3.5">
                   <div className="flex items-center gap-2">
                     <Lightbulb className="h-4 w-4 text-amber-500" />
@@ -474,7 +457,6 @@ export default function ForecastingPage() {
                   </div>
                 </div>
 
-                {/* Quarterly Forecast */}
                 <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-xs space-y-3.5">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-bold text-gray-900">

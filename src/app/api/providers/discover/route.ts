@@ -11,9 +11,6 @@ interface DiscoverRequestBody {
   tenant_id?: string;
 }
 
-/**
- * Resolves the active tenant ID for insertion.
- */
 async function resolveTenantId(providedTenantId?: string): Promise<string> {
   if (providedTenantId && providedTenantId.trim().length > 0) {
     return providedTenantId.trim();
@@ -29,18 +26,10 @@ async function resolveTenantId(providedTenantId?: string): Promise<string> {
   if (org?.tenant_id) {
     return org.tenant_id;
   }
-  //TODO: DO NO T FALLBACK (IT IS A SECURITY BREACH)
-  return 'a1b2c3d4-0001-4000-8000-000000000001';
+
+  throw new Error('Tenant ID could not be resolved from active session or database.');
 }
 
-/**
- * POST /api/providers/discover
- *
- * Ingests scraped text or a URL of a Saudi experience provider page.
- * Performs structured AI extraction via Groq LLM (llama-3.1-70b-versatile),
- * generates a 384-dimensional embedding using local @xenova/transformers,
- * and securely saves the provider to the Supabase experience_providers table.
- */
 export async function POST(request: NextRequest) {
   try {
     let body: DiscoverRequestBody;
@@ -56,10 +45,8 @@ export async function POST(request: NextRequest) {
     let textContent = body.text_content?.trim() || '';
     const targetUrl = body.url?.trim() || '';
 
-    // If a URL is provided, scrape it with cheerio
     if (targetUrl) {
       try {
-        console.log(`Scraping URL: ${targetUrl}`);
         const scrapeResponse = await fetch(targetUrl, {
           headers: {
             'User-Agent': 'Mozilla/5.0 (compatible; ThereBot/1.0; DMC Discovery Agent)',
@@ -81,11 +68,9 @@ export async function POST(request: NextRequest) {
 
         const html = await scrapeResponse.text();
 
-        // Use cheerio to extract clean readable text and contact details
         const cheerio = await import('cheerio');
         const $ = cheerio.load(html);
 
-        // 1. Extract contact phones & WhatsApp links from the entire DOM
         const contactNumbers = new Set<string>();
 
         $('a[href^="tel:"]').each((_, el) => {
@@ -104,7 +89,6 @@ export async function POST(request: NextRequest) {
           for (const p of regexPhones) contactNumbers.add(p);
         }
 
-        // 2. If no phone found on landing page -> discover and crawl the /contact-us subpage
         if (contactNumbers.size === 0) {
           let contactPageUrl: string | null = null;
           $('a').each((_, el) => {
@@ -119,14 +103,11 @@ export async function POST(request: NextRequest) {
             ) {
               try {
                 contactPageUrl = new URL(href, targetUrl).href;
-              } catch {
-                // Invalid relative URL
-              }
+              } catch {}
             }
           });
 
           if (contactPageUrl && contactPageUrl !== targetUrl) {
-            console.log(`Crawling contact subpage: ${contactPageUrl}`);
             try {
               const contactRes = await fetch(contactPageUrl, {
                 headers: {
@@ -157,16 +138,12 @@ export async function POST(request: NextRequest) {
                   for (const p of subPhones) contactNumbers.add(p);
                 }
               }
-            } catch (contactErr) {
-              console.warn(`Contact subpage crawl failed:`, contactErr);
-            }
+            } catch {}
           }
         }
 
-        // 3. Remove scripts and styles
         $('script, style, iframe, noscript, svg').remove();
 
-        // Extract clean text from body
         let scrapedText = $('body').text()
           .replace(/\s+/g, ' ')
           .replace(/\n{3,}/g, '\n\n')
@@ -175,13 +152,9 @@ export async function POST(request: NextRequest) {
 
         if (contactNumbers.size > 0) {
           const phoneList = Array.from(contactNumbers).join(' | ');
-          console.log(`Discovered contact numbers:`, phoneList);
           scrapedText += `\n\n--- بيانات التواصل وأرقام الهواتف والواتساب المكتشفة ---\nرقم هاتف / واتساب للتواصل: ${phoneList}`;
         }
 
-        console.log(`Scraped ${scrapedText.length} chars from ${targetUrl}`);
-
-        // Combine: scraped text takes priority, append any additional manual text
         textContent = textContent
           ? `${scrapedText}\n\n---\nAdditional context:\n${textContent}`
           : scrapedText;
@@ -194,7 +167,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Validate we have text content (from textarea or scraped URL)
     if (!textContent || textContent.length === 0) {
       return NextResponse.json(
         {
@@ -205,16 +177,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 1. Structured AI Extraction via Groq LLM (Zod verified)
     const extracted = await extractExperienceProvider(textContent);
-
-    // 2. Vector Embedding Generation (384-dim local @xenova/transformers)
     const embedding = await generateProviderEmbedding(extracted);
-
-    // 3. Resolve Tenant ID
     const tenantId = await resolveTenantId(body.tenant_id);
 
-    // 4. Secure Database Insertion via Supabase Server Client
     const supabase = createServerSupabaseClient();
     const { data: insertedProvider, error: insertError } = await supabase
       .from('experience_providers')
@@ -227,13 +193,12 @@ export async function POST(request: NextRequest) {
         verification_status: extracted.verification_status,
         phone_number: extracted.phone_number || null,
         phone: extracted.phone_number || null,
-        embedding: JSON.stringify(embedding), // Format for pgvector column
+        embedding: JSON.stringify(embedding),
       })
       .select('id, tenant_id, name, city, experience_type, capacity, verification_status, phone_number, created_at')
       .single();
 
     if (insertError || !insertedProvider) {
-      console.error('Failed to insert experience provider into Supabase:', insertError);
       return NextResponse.json(
         {
           success: false,
@@ -255,7 +220,6 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
-    console.error('Unexpected error in /api/providers/discover:', error);
     return NextResponse.json(
       {
         success: false,

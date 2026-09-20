@@ -1,8 +1,3 @@
-/**
- * Deterministic Arabic date formatting.
- * Avoids Node.js SSR vs Browser client Intl locale hydration mismatches.
- */
-
 const ARABIC_MONTHS = [
   'يناير',
   'فبراير',

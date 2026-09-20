@@ -48,7 +48,6 @@ export async function GET(req: NextRequest) {
 
     const supabase = createServerSupabaseClient();
 
-    // 1. Fetch real operational data from Supabase tables
     const [{ data: eventsData }, { data: providersData }, { data: itinerariesData }] =
       await Promise.all([
         supabase
@@ -70,7 +69,6 @@ export async function GET(req: NextRequest) {
       providers = providers.filter((p) => p.city.includes(filterCity));
     }
 
-    // 2. Derive real statistical metrics directly from DB
     const totalEvents = events.length || 1;
     const escalatedEvents = events.filter((e) => e.status === 'escalated');
     const confirmedEvents = events.filter((e) => e.status === 'confirmed');
@@ -175,7 +173,6 @@ Respond ONLY with valid JSON in this exact structure:
       data: result.data,
     });
   } catch (error) {
-    console.error('Error in GET /api/ai/analytics:', error);
     return NextResponse.json(
       {
         success: false,

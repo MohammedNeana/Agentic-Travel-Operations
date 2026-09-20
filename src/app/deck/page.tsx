@@ -16,7 +16,6 @@ export default function DeckPage() {
       dir="ltr"
       className="min-h-screen bg-slate-100 py-8 px-4 sm:px-8 text-slate-800 font-sans text-left print:bg-white print:p-0 print:text-black"
     >
-      {/* Top Floating Action for Printing */}
       <div className="mx-auto max-w-4xl mb-6 flex items-center justify-between bg-white p-4 rounded-2xl shadow-sm border border-slate-200 print:hidden text-left">
         <div className="text-left">
           <h2 className="text-sm font-bold text-slate-900">
@@ -36,12 +35,10 @@ export default function DeckPage() {
         </button>
       </div>
 
-      {/* Main Document Container (A4 Proportions) */}
       <div
         dir="ltr"
         className="mx-auto max-w-4xl bg-white shadow-md border border-slate-200 rounded-3xl p-8 sm:p-12 space-y-12 text-left print:shadow-none print:border-none print:p-0 print:space-y-8"
       >
-        {/* Cover / Header Section */}
         <div className="border-b border-slate-200 pb-8 text-left">
           <div className="flex items-center justify-between gap-4 mb-4">
             <div className="flex items-center gap-2.5">
@@ -83,7 +80,6 @@ export default function DeckPage() {
           </div>
         </div>
 
-        {/* 1. Problem Statement */}
         <section className="space-y-4 text-left">
           <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2 text-left">
             <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-900 text-white text-xs shrink-0">1</span>
@@ -114,7 +110,6 @@ export default function DeckPage() {
           </div>
         </section>
 
-        {/* 2. The Solution: ThereOps */}
         <section className="space-y-4 text-left">
           <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2 text-left">
             <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-900 text-white text-xs shrink-0">2</span>
@@ -192,7 +187,6 @@ export default function DeckPage() {
           </div>
         </section>
 
-        {/* 3. Technical Architecture */}
         <section className="space-y-4 text-left">
           <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2 text-left">
             <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-900 text-white text-xs shrink-0">3</span>
@@ -223,7 +217,6 @@ export default function DeckPage() {
               </div>
             </div>
 
-            {/* Architecture Flow Representation */}
             <div className="pt-4 border-t border-slate-800 text-[11px] font-mono text-slate-300 leading-relaxed space-y-1 text-left">
               <div className="text-emerald-400 font-bold">Operational Workflow:</div>
               <div>[Supplier WhatsApp Audio/Text] &rarr; [Groq Whisper (Arabic Voice Transcription)]</div>
@@ -234,7 +227,6 @@ export default function DeckPage() {
           </div>
         </section>
 
-        {/* 4. Operational Benchmarks */}
         <section className="space-y-4 text-left">
           <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2 text-left">
             <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-900 text-white text-xs shrink-0">4</span>
@@ -265,7 +257,6 @@ export default function DeckPage() {
           </div>
         </section>
 
-        {/* 5. Builder Profile & Track Record */}
         <section className="space-y-4 border-t border-slate-200 pt-8 text-left">
           <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2 text-left">
             <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-900 text-white text-xs shrink-0">5</span>
@@ -320,7 +311,6 @@ export default function DeckPage() {
           </div>
         </section>
 
-        {/* Footer */}
         <div className="border-t border-slate-200 pt-6 text-center text-xs text-slate-400">
           ThereOps - Submitted for the There DMC Innovation Challenge | Confidential & Proprietary
         </div>

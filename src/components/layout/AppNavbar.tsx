@@ -17,7 +17,6 @@ export function AppNavbar() {
   useEffect(() => {
     const supabase = createBrowserSupabaseClient();
 
-    // Check active session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       if (session?.user?.user_metadata?.company_name) {
@@ -37,7 +36,6 @@ export function AppNavbar() {
     };
   }, []);
 
-  // Hide navbar on login page or deck print page
   if (pathname === '/login' || pathname === '/deck') {
     return null;
   }
@@ -49,8 +47,7 @@ export function AppNavbar() {
       await supabase.auth.signOut();
       router.push('/login');
       router.refresh();
-    } catch (err) {
-      console.error('Logout error:', err);
+    } catch {
     } finally {
       setIsLoggingOut(false);
     }
@@ -86,7 +83,6 @@ export function AppNavbar() {
   return (
     <header className="sticky top-0 z-30 border-b border-gray-100 bg-white/95 backdrop-blur-md shadow-xs">
       <div className="mx-auto flex max-w-screen-2xl items-center justify-between px-6 py-3">
-        {/* Brand & Nav */}
         <div className="flex items-center gap-8">
           <Link href="/" className="flex items-center gap-2.5 group">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-900 text-white shadow-xs group-hover:bg-violet-700 transition-colors">
@@ -108,7 +104,6 @@ export function AppNavbar() {
             </div>
           </Link>
 
-          {/* Navigation Links */}
           <nav className="flex items-center gap-1.5 bg-gray-50/80 p-1 rounded-xl border border-gray-100">
             {navLinks.map((link) => {
               const Icon = link.icon;
@@ -134,7 +129,6 @@ export function AppNavbar() {
           </nav>
         </div>
 
-        {/* User Info & Actions */}
         <div className="flex items-center gap-3">
           {user ? (
             <div className="flex items-center gap-3">

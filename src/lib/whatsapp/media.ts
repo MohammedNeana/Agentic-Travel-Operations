@@ -18,9 +18,6 @@ export interface RetrievedAudioMedia {
   fileName: string;
 }
 
-/**
- * Retrieves the download URL for a WhatsApp media ID via the WhatsApp Graph API.
- */
 export async function getWhatsAppMediaUrl(
   mediaId: string,
   accessToken = process.env.WHATSAPP_ACCESS_TOKEN
@@ -47,9 +44,7 @@ export async function getWhatsAppMediaUrl(
       if (errObj?.error?.code === 190) {
         isExpiredToken = true;
       }
-    } catch {
-      // not JSON
-    }
+    } catch {}
 
     if (isExpiredToken) {
       throw new Error(
@@ -76,9 +71,6 @@ export async function getWhatsAppMediaUrl(
   };
 }
 
-/**
- * Downloads the binary audio file from the WhatsApp media URL.
- */
 export async function downloadWhatsAppAudio(
   mediaUrl: string,
   mimeType: string,
@@ -119,9 +111,6 @@ export async function downloadWhatsAppAudio(
   };
 }
 
-/**
- * High-level helper to fetch and download WhatsApp audio in one operation.
- */
 export async function fetchAndDownloadWhatsAppAudio(
   mediaId: string
 ): Promise<RetrievedAudioMedia> {

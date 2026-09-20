@@ -31,7 +31,6 @@ export async function GET(req: NextRequest) {
       }
     );
   } catch (error) {
-    console.error('Error in GET /api/itineraries:', error);
     return NextResponse.json(
       {
         success: false,

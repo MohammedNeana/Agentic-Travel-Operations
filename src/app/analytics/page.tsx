@@ -52,7 +52,6 @@ export default function AnalyticsPage() {
         setErrorMessage(json.error || 'فشل توليد التحليلات عبر نموذج الذكاء الاصطناعي.');
       }
     } catch (err) {
-      console.error('Failed to load analytics:', err);
       setErrorMessage(err instanceof Error ? err.message : 'خطأ في الاتصال بالشبكة.');
     } finally {
       setIsLoading(false);
@@ -61,7 +60,6 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     fetchAnalytics();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const getTierBadgeColor = (tier: SupplierScorecard['tier']) => {
@@ -79,7 +77,6 @@ export default function AnalyticsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50/50 pb-16">
-      {/* Top Header */}
       <div className="border-b border-gray-100 bg-white/90 backdrop-blur-md sticky top-[57px] z-20">
         <div className="mx-auto flex max-w-screen-2xl items-center justify-between px-6 py-4">
           <div>
@@ -121,7 +118,6 @@ export default function AnalyticsPage() {
       </div>
 
       <div className="mx-auto max-w-screen-2xl px-6 pt-6 space-y-6">
-        {/* City Filter Bar */}
         <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-xs flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-gray-400" />
@@ -151,7 +147,6 @@ export default function AnalyticsPage() {
           </div>
         </div>
 
-        {/* Error Alert */}
         {errorMessage && (
           <div className="flex items-start gap-3 rounded-2xl bg-red-50 p-4 border border-red-200">
             <AlertTriangle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
@@ -169,7 +164,6 @@ export default function AnalyticsPage() {
           </div>
         )}
 
-        {/* Loading Spinner */}
         {isLoading && (
           <div className="flex flex-col items-center justify-center p-16 bg-white rounded-2xl border border-gray-100 shadow-xs">
             <Loader2 className="h-8 w-8 animate-spin text-emerald-600 mb-3" />
@@ -184,7 +178,6 @@ export default function AnalyticsPage() {
 
         {!isLoading && data && (
           <>
-            {/* 4 Key Metric Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-xs">
                 <div className="flex items-center justify-between text-gray-500 mb-2">
@@ -238,7 +231,6 @@ export default function AnalyticsPage() {
               </div>
             </div>
 
-            {/* AI Executive Post-Mortem Briefing */}
             <div className="bg-gradient-to-br from-slate-900 via-gray-900 to-emerald-950 rounded-2xl p-6 text-white shadow-md space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold">
@@ -254,7 +246,6 @@ export default function AnalyticsPage() {
               </p>
             </div>
 
-            {/* Navigation Tabs */}
             <div className="flex items-center gap-2 border-b border-gray-200">
               <button
                 type="button"
@@ -291,7 +282,6 @@ export default function AnalyticsPage() {
               </button>
             </div>
 
-            {/* Tab 1: Supplier Scorecards */}
             {activeTab === 'scorecards' && (
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -319,7 +309,6 @@ export default function AnalyticsPage() {
                           </span>
                         </div>
 
-                        {/* Metrics Bar */}
                         <div className="grid grid-cols-2 gap-2 my-3 p-2.5 rounded-xl bg-gray-50 border border-gray-100">
                           <div>
                             <span className="text-[10px] text-gray-400 block">درجة الموثوقية:</span>
@@ -335,7 +324,6 @@ export default function AnalyticsPage() {
                           </div>
                         </div>
 
-                        {/* AI Evaluation */}
                         <div className="space-y-1">
                           <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1">
                             <Sparkles className="h-3 w-3 text-emerald-600" />
@@ -347,7 +335,6 @@ export default function AnalyticsPage() {
                         </div>
                       </div>
 
-                      {/* Action for DMC */}
                       <div className="pt-3 border-t border-gray-100">
                         <span className="text-[10px] font-bold text-gray-700 block mb-0.5">
                           الإجراء المقترح لفرق الـ DMC:
@@ -362,7 +349,6 @@ export default function AnalyticsPage() {
               </div>
             )}
 
-            {/* Tab 2: Recurring Operational Issues */}
             {activeTab === 'issues' && (
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -410,7 +396,6 @@ export default function AnalyticsPage() {
               </div>
             )}
 
-            {/* Tab 3: Strategic Recommendations */}
             {activeTab === 'recommendations' && (
               <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-xs space-y-4">
                 <div className="flex items-center gap-2">

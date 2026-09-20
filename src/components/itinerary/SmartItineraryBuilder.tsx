@@ -54,7 +54,6 @@ export function SmartItineraryBuilder({
     setIsMounted(true);
   }, []);
 
-  // Filter out external Chrome extension unhandled rejection noise from Next.js terminal logs
   useEffect(() => {
     const handleRejection = (event: PromiseRejectionEvent) => {
       const reasonStr = String(event.reason?.stack || event.reason || '');
@@ -66,7 +65,6 @@ export function SmartItineraryBuilder({
     return () => window.removeEventListener('unhandledrejection', handleRejection);
   }, []);
 
-  // Real-time WebSocket subscription via Supabase Realtime for instant event updates
   useEffect(() => {
     if (!profile?.id) return;
 
@@ -77,7 +75,6 @@ export function SmartItineraryBuilder({
         'postgres_changes',
         { event: '*', schema: 'public', table: 'itinerary_events' },
         async () => {
-          // If the user has local unsaved edits, do not overwrite them automatically
           if (hasUnsavedChanges) return;
 
           try {
@@ -89,9 +86,7 @@ export function SmartItineraryBuilder({
               setItineraryEvents(events);
               setWarnings(detectScheduleWarnings(events, profile));
             }
-          } catch (err) {
-            console.error('Failed to sync itinerary on realtime update:', err);
-          }
+          } catch {}
         }
       )
       .subscribe();
@@ -109,7 +104,6 @@ export function SmartItineraryBuilder({
     setSaveSuccess(false);
 
     try {
-      // Fetch recommendations and traveler-specific itinerary in parallel
       const [matchRes, itinRes] = await Promise.all([
         fetch('/api/providers/match', {
           method: 'POST',
@@ -136,8 +130,7 @@ export function SmartItineraryBuilder({
         setItineraryEvents(newEvents);
         setWarnings(detectScheduleWarnings(newEvents, newProfile));
       }
-    } catch (err) {
-      console.error('Failed to switch traveler:', err);
+    } catch {
     } finally {
       setIsReMatching(false);
       setIsLoadingItinerary(false);
@@ -159,33 +152,30 @@ export function SmartItineraryBuilder({
       if (data.success && Array.isArray(data.recommendations)) {
         setRecommendations(data.recommendations);
       }
-    } catch (err) {
-      console.error('Failed to rematch providers:', err);
+    } catch {
     } finally {
       setIsReMatching(false);
     }
   };
 
-  // Add event from Smart Match recommendations to timeline with smart non-conflicting time slotting
   const handleAddEvent = (provider: ExperienceProvider) => {
     const lastEvent = itineraryEvents[itineraryEvents.length - 1];
     const eventDate = lastEvent?.eventDate || itinerary?.startDate || profile?.arrivalDate || '2026-10-18';
     const dayEvents = itineraryEvents.filter((e) => e.eventDate === eventDate);
     const sortOrder = dayEvents.length + 1;
 
-    // Smart automatic slotting: find latest endTime on this day and add next slot with buffer
     let smartStart = '09:00';
     let smartEnd = '12:00';
 
     if (dayEvents.length > 0) {
       const sortedByEnd = [...dayEvents].sort((a, b) => b.endTime.localeCompare(a.endTime));
-      const latestEnd = sortedByEnd[0].endTime; // e.g. "13:00"
+      const latestEnd = sortedByEnd[0].endTime;
       const [hStr, mStr] = latestEnd.split(':');
       const latestH = parseInt(hStr, 10) || 12;
       const latestM = mStr || '00';
 
-      const nextStartH = latestH + 1; // 1-hour transit / buffer
-      const nextEndH = nextStartH + 3; // 3-hour duration
+      const nextStartH = latestH + 1;
+      const nextEndH = nextStartH + 3;
 
       if (nextEndH <= 22) {
         smartStart = `${String(nextStartH).padStart(2, '0')}:${latestM}`;
@@ -224,7 +214,6 @@ export function SmartItineraryBuilder({
     setSaveSuccess(false);
   };
 
-  // Swap / Reorder events via Drag and Drop (swapping time slots and positions)
   const handleReorderEvents = (sourceId: string, targetId: string) => {
     if (sourceId === targetId) return;
 
@@ -235,7 +224,6 @@ export function SmartItineraryBuilder({
     const sourceEvent = itineraryEvents[sourceIdx];
     const targetEvent = itineraryEvents[targetIdx];
 
-    // Swap time slots and dates between source and target
     const updatedSource: ItineraryEvent = {
       ...sourceEvent,
       eventDate: targetEvent.eventDate,
@@ -256,7 +244,6 @@ export function SmartItineraryBuilder({
     newEvents[sourceIdx] = updatedSource;
     newEvents[targetIdx] = updatedTarget;
 
-    // Sort by date then startTime
     newEvents.sort((a, b) => {
       const dateCmp = a.eventDate.localeCompare(b.eventDate);
       if (dateCmp !== 0) return dateCmp;
@@ -269,7 +256,6 @@ export function SmartItineraryBuilder({
     setSaveSuccess(false);
   };
 
-  // Manually update specific event hours and date
   const handleUpdateEventTime = (
     eventId: string,
     startTime: string,
@@ -286,7 +272,6 @@ export function SmartItineraryBuilder({
       };
     });
 
-    // Sort by date then startTime
     newEvents.sort((a, b) => {
       const dateCmp = a.eventDate.localeCompare(b.eventDate);
       if (dateCmp !== 0) return dateCmp;
@@ -299,7 +284,6 @@ export function SmartItineraryBuilder({
     setSaveSuccess(false);
   };
 
-  // Remove event from timeline
   const handleRemoveEvent = (eventId: string) => {
     const updated = itineraryEvents.filter((e) => e.id !== eventId);
     setItineraryEvents(updated);
@@ -308,7 +292,6 @@ export function SmartItineraryBuilder({
     setSaveSuccess(false);
   };
 
-  // Sync current itinerary events to Supabase
   const handleSaveItinerary = async () => {
     if (!itinerary?.id) return;
     setIsSaving(true);
@@ -336,7 +319,7 @@ export function SmartItineraryBuilder({
           (n: { status: string }) => n.status === 'sent'
         );
         if (sentNotifs.length > 0) {
-          setSaveFeedbackText(`تم الحفظ وإرسال إشعار واتساب للمزود 📱`);
+          setSaveFeedbackText('تم الحفظ وإرسال إشعار واتساب للمزود');
         } else {
           setSaveFeedbackText('تم الحفظ بنجاح');
         }
@@ -345,8 +328,7 @@ export function SmartItineraryBuilder({
       } else {
         alert(`فشل الحفظ: ${data.error || 'حدث خطأ غير متوقع'}`);
       }
-    } catch (err) {
-      console.error('Failed to save itinerary to Supabase:', err);
+    } catch {
       alert('تعذر الاتصال بالخادم لحفظ التغييرات.');
     } finally {
       setIsSaving(false);
@@ -368,7 +350,6 @@ export function SmartItineraryBuilder({
 
   return (
     <div className="min-h-screen bg-gray-50/50">
-      {/* Top Bar */}
       <header className="sticky top-[57px] z-20 border-b border-gray-100 bg-white/90 backdrop-blur-md">
         <div className="mx-auto flex max-w-screen-2xl items-center justify-between px-6 py-4">
           <div>
@@ -428,14 +409,12 @@ export function SmartItineraryBuilder({
         </div>
       </header>
 
-      {/* Warnings */}
       {warnings.length > 0 && (
         <div className="mx-auto max-w-screen-2xl px-6 pt-5">
           <WarningSection warnings={warnings} isLoading={isLoading} />
         </div>
       )}
 
-      {/* Main Layout: Sidebar | Timeline | SmartMatch */}
       <main className="mx-auto flex max-w-screen-2xl gap-6 px-6 py-6 items-start">
         <TravelerProfileSidebar
           profile={profile}

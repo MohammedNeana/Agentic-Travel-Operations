@@ -27,9 +27,7 @@ async function getExtractor(): Promise<FeatureExtractor> {
       if (ortWeb?.env?.wasm) {
         ortWeb.env.wasm.numThreads = 1;
       }
-    } catch {
-      // Ignore
-    }
+    } catch {}
 
     if (env.backends?.onnx?.wasm) {
       env.backends.onnx.wasm.numThreads = 1;

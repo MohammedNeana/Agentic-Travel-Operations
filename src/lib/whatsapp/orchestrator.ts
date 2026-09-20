@@ -8,29 +8,6 @@ import {
 } from './types';
 import { callLLMJson } from '@/lib/ai/llm-client';
 
-interface GroqChatCompletionResponse {
-  choices?: Array<{
-    message?: {
-      content?: string;
-    };
-  }>;
-  error?: {
-    message: string;
-    type?: string;
-    code?: string;
-  };
-}
-
-/**
- * Autonomous AI Operations Orchestrator:
- * When an incoming message indicates a delay or schedule change, the LLM:
- * 1. Analyzes the delay amount and root cause.
- * 2. Examines the full itinerary timeline to check if subsequent trips are impacted.
- * 3. Calculates non-overlapping adjusted start and end times for all affected events.
- * 4. Drafts natural, human-like Arabic WhatsApp notices to notify downstream vendors.
- * 5. Updates Supabase with the new schedule and comprehensive incident log.
- * 6. Dispatches the WhatsApp messages directly to the affected downstream vendors.
- */
 export async function orchestrateItineraryCascade(options: {
   eventId: string;
   vendorMessage: string;
@@ -39,7 +16,6 @@ export async function orchestrateItineraryCascade(options: {
   const supabase = createServerSupabaseClient();
   const { eventId, vendorMessage } = options;
 
-  // 1. Fetch current target event
   const { data: targetEvent, error: targetErr } = await supabase
     .from('itinerary_events')
     .select('id, itinerary_id, event_date, start_time, end_time, title, status, sort_order, experience_provider_id')
@@ -47,7 +23,6 @@ export async function orchestrateItineraryCascade(options: {
     .single();
 
   if (targetErr || !targetEvent) {
-    console.error(`[AI Orchestrator] ❌ Target event ${eventId} not found:`, targetErr);
     return {
       success: false,
       updatedEventsCount: 0,
@@ -56,7 +31,6 @@ export async function orchestrateItineraryCascade(options: {
     };
   }
 
-  // 2. Fetch all events in this itinerary for the same day (or whole itinerary)
   const { data: allEvents, error: allEventsErr } = await supabase
     .from('itinerary_events')
     .select('id, itinerary_id, event_date, start_time, end_time, title, status, sort_order, experience_provider_id, escalation_reason')
@@ -65,7 +39,6 @@ export async function orchestrateItineraryCascade(options: {
     .order('start_time', { ascending: true });
 
   if (allEventsErr || !allEvents || allEvents.length === 0) {
-    console.error('[AI Orchestrator] ❌ Failed to fetch itinerary events:', allEventsErr);
     return {
       success: false,
       updatedEventsCount: 0,
@@ -74,12 +47,10 @@ export async function orchestrateItineraryCascade(options: {
     };
   }
 
-  // 3. Fetch linked experience providers for phone numbers and names
   const { data: providers } = await supabase
     .from('experience_providers')
     .select('id, name, phone_number');
 
-  // 4. Fetch itinerary & traveler profile info (nationality, group size)
   const { data: itineraryData } = await supabase
     .from('itineraries')
     .select('id, title, guest_count, traveler_profile_id')
@@ -102,7 +73,6 @@ export async function orchestrateItineraryCascade(options: {
     }
   }
 
-  // 5. Build enriched schedule structure for the LLM
   const enrichedEvents = allEvents.map((ev, index) => {
     const prov = providers?.find((p) => p.id === ev.experience_provider_id);
     return {
@@ -119,7 +89,6 @@ export async function orchestrateItineraryCascade(options: {
     };
   });
 
-  // 6. Consult Groq LLM as the Autonomous Operations Director
   const apiKey = process.env.GROQ_API_KEY;
   const model = process.env.GROQ_LLM_MODEL || 'llama-3.3-70b-versatile';
 
@@ -136,8 +105,7 @@ export async function orchestrateItineraryCascade(options: {
         apiKey,
         model,
       });
-    } catch (llmErr) {
-      console.warn('[AI Orchestrator] ⚠️ Groq LLM call failed, falling back to rule-based orchestration:', llmErr);
+    } catch {
       decision = fallbackOrchestrationDecision({
         targetEvent,
         allEvents: enrichedEvents,
@@ -156,15 +124,6 @@ export async function orchestrateItineraryCascade(options: {
     });
   }
 
-  console.log('[AI Orchestrator] 🧠 Autonomous Decision Orchestrated by LLM:', {
-    delayMinutes: decision.delayMinutes,
-    isCascadeImpact: decision.isCascadeImpact,
-    adjustmentsCount: decision.scheduleAdjustments.length,
-    downstreamNoticesCount: decision.downstreamNotices.length,
-    incidentSummary: decision.incidentSummary,
-  });
-
-  // 7. Execute Schedule Adjustments in Database
   let updatedEventsCount = 0;
   for (const adj of decision.scheduleAdjustments) {
     const startStr = adj.newStartTime.length === 5 ? `${adj.newStartTime}:00` : adj.newStartTime;
@@ -172,7 +131,7 @@ export async function orchestrateItineraryCascade(options: {
 
     const baseReason = adj.reason || decision.incidentSummary;
     const fullReason = decision.travelerNotification
-      ? `${baseReason} 🌐 [${decision.travelerNotification.flag} ${decision.travelerNotification.language}]: "${decision.travelerNotification.message}"`
+      ? `${baseReason} [${decision.travelerNotification.language}]: "${decision.travelerNotification.message}"`
       : baseReason;
 
     const { error: updateErr } = await supabase
@@ -188,22 +147,12 @@ export async function orchestrateItineraryCascade(options: {
 
     if (!updateErr) {
       updatedEventsCount++;
-      console.log(
-        `[AI Orchestrator] 🕒 Updated event "${adj.eventTitle}" time to ${adj.newStartTime} - ${adj.newEndTime} (Status: ${adj.newStatus || 'escalated'})`
-      );
-    } else {
-      console.error(`[AI Orchestrator] ❌ Failed to update event ${adj.eventId}:`, updateErr);
     }
   }
 
-  // 8. Dispatch Proactive WhatsApp Messages to Impacted Downstream Vendors
   let dispatchedNoticesCount = 0;
   for (const notice of decision.downstreamNotices) {
     if (notice.whatsappMessage && notice.whatsappMessage.trim().length > 0) {
-      console.log(
-        `[AI Orchestrator] 📱 Dispatching cascade notice to downstream vendor "${notice.providerName}" (${notice.providerPhone || 'fallback'})...`
-      );
-
       const sendRes = await sendWhatsAppTextMessage(
         notice.providerPhone || '',
         notice.whatsappMessage
@@ -211,9 +160,6 @@ export async function orchestrateItineraryCascade(options: {
 
       if (sendRes.success) {
         dispatchedNoticesCount++;
-        console.log(`[AI Orchestrator] ✅ Cascade notice sent to "${notice.providerName}"!`);
-      } else {
-        console.warn(`[AI Orchestrator] ⚠️ Failed to send notice to "${notice.providerName}":`, sendRes.error);
       }
     }
   }
@@ -228,9 +174,6 @@ export async function orchestrateItineraryCascade(options: {
   };
 }
 
-/**
- * Prompts Groq LLM to act as the Senior Autonomous Operations Dispatcher.
- */
 async function consultLLMOrchestrator(params: {
   targetEventId: string;
   vendorMessage: string;
@@ -251,13 +194,13 @@ async function consultLLMOrchestrator(params: {
   apiKey: string;
   model: string;
 }): Promise<OrchestrationDecision> {
-  const { targetEventId, vendorMessage, enrichedEvents, travelerNationality, groupSize, apiKey, model } = params;
+  const { targetEventId, vendorMessage, enrichedEvents, travelerNationality, groupSize } = params;
 
   const targetEvent = enrichedEvents.find((e) => e.eventId === targetEventId);
 
   const scheduleDescription = enrichedEvents
     .map((e) => {
-      const marker = e.isTargetEvent ? '⭐ [الفعالية المتأثرة بالبلاغ]' : `[الفعالية رقم ${e.order}]`;
+      const marker = e.isTargetEvent ? '[الفعالية المتأثرة بالبلاغ]' : `[الفعالية رقم ${e.order}]`;
       return `${marker}:
 - معرف الفعالية: "${e.eventId}"
 - اسم الفعالية: "${e.title}"
@@ -268,7 +211,7 @@ async function consultLLMOrchestrator(params: {
     .join('\n\n');
 
   const systemPrompt = `You are the Senior AI Operations Director & Dispatch Orchestrator for a premier Saudi Destination Management Company (DMC).
-You operate with 90% autonomous operational intelligence to manage trip schedules, resolve vendor delays, eliminate schedule conflicts, and coordinate downstream vendors.
+You operate with autonomous operational intelligence to manage trip schedules, resolve vendor delays, eliminate schedule conflicts, and coordinate downstream vendors.
 
 You receive an operational WhatsApp message (text or voice transcription) from a provider regarding an activity in an active itinerary.
 Guest Details: الوفد (${travelerNationality}) عددهم ${groupSize} أشخاص.
@@ -278,7 +221,7 @@ YOUR AUTONOMOUS MISSION:
    - Extract the delay duration (e.g. 2 hours, 90 minutes, 30 minutes, or a new stated start time like 16:00).
    - If not explicitly stated in hours/minutes, deduce the realistic delay from the vendor's context.
 
-2. CASCADE IMPACT ANALYSIS ON SUBSEQUENT TRIPS (CRITICAL):
+2. CASCADE IMPACT ANALYSIS ON SUBSEQUENT TRIPS:
    - Calculate the new start and end time for the target delayed event.
    - Look at the subsequent events in the itinerary.
    - Account for realistic travel/buffer time (at least 30 to 60 minutes) between destinations.
@@ -290,7 +233,7 @@ YOUR AUTONOMOUS MISSION:
    - For every downstream vendor whose booking needs to be pushed forward:
      Draft a warm, courteous, and culturally authentic Arabic WhatsApp message written as the DMC Operations Coordinator.
      Requirements for each downstream message:
-     * Tone: Professional, warm Saudi hospitality style ("السلام عليكم ورحمة الله، حياك الله أخوي [اسم المزود] 👋 معك منسق العمليات في There DMC").
+     * Tone: Professional, warm Saudi hospitality style ("السلام عليكم ورحمة الله، حياك الله أخوي [اسم المزود]، معك منسق العمليات في There DMC").
      * Inform them naturally that the group experienced an unexpected delay in their previous tour/activity.
      * State the updated estimated arrival time clearly ("نقّدر وصول الوفد لكم الساعة [الوقت الجديد] بدلاً من [الوقت الأصلي]").
      * Respect traveler privacy: mention group nationality and size, NEVER traveler personal names.
@@ -302,20 +245,20 @@ YOUR AUTONOMOUS MISSION:
 
 5. MULTILINGUAL TRAVELER / TOUR LEADER NOTIFICATION ("travelerNotification"):
    - When a delay or reschedule cascade occurs, the delegation tour leader / traveler must be notified in their NATIVE LANGUAGE based on delegation nationality: "${travelerNationality}".
-   - Detect appropriate language and flag:
-     * If Japanese / ياباني -> Japanese 🇯🇵 (日本語)
-     * If Italian / إيطالي -> Italian 🇮🇹 (Italiano)
-     * If French / فرنسي -> French 🇫🇷 (Français)
-     * If German / ألماني -> German 🇩🇪 (Deutsch)
-     * If Saudi / Arabic / عربي -> Arabic 🇸🇦
-     * Otherwise -> English 🇬🇧
+   - Detect appropriate language:
+     * If Japanese / ياباني -> Japanese (日本語)
+     * If Italian / إيطالي -> Italian (Italiano)
+     * If French / فرنسي -> French (Français)
+     * If German / ألماني -> German (Deutsch)
+     * If Saudi / Arabic / عربي -> Arabic
+     * Otherwise -> English
    - Draft a reassuring, professional update message in that language explaining the slight schedule adjustment, estimated new time, and ensuring them that their comfort and experience quality remain the top priority.
    - Include "translatedSummaryInArabic" so the DMC operations team can immediately understand the message.
 
 Respond ONLY with valid JSON in this exact structure:
 {
   "delayMinutes": 120,
-  "incidentType": "delay" | "emergency" | "reschedule" | "cancellation" | "general",
+  "incidentType": "delay",
   "isCascadeImpact": true,
   "incidentSummary": "Arabic summary of what happened, time shifted, and actions taken",
   "scheduleAdjustments": [
@@ -341,7 +284,7 @@ Respond ONLY with valid JSON in this exact structure:
   ],
   "travelerNotification": {
     "language": "Japanese (日本語)",
-    "flag": "🇯🇵",
+    "flag": "JP",
     "title": "Tour Schedule Update",
     "message": "Localized message in traveler native language...",
     "translatedSummaryInArabic": "الملخص بالعربية لمنسق الرحلة..."
@@ -374,11 +317,6 @@ ${scheduleDescription}`;
   };
 }
 
-/**
- * Deterministic fallback orchestration if Groq LLM is unreachable.
- * Calculates time math (e.g. 2 hours / 120 mins delay), cascades downstream events,
- * and drafts standard polite Arabic messages.
- */
 function fallbackOrchestrationDecision(params: {
   targetEvent: {
     id: string;
@@ -444,11 +382,10 @@ function fallbackOrchestrationDecision(params: {
   let prevEndTime = newTargetEnd;
   let isCascadeImpact = false;
 
-  // Check downstream events
   for (let i = targetIdx + 1; i < allEvents.length; i++) {
     const nextEv = allEvents[i];
     const [prevH, prevM] = prevEndTime.split(':').map((v) => parseInt(v, 10));
-    const prevTotal = prevH * 60 + prevM + 30; // 30 min transit buffer
+    const prevTotal = prevH * 60 + prevM + 30;
 
     const [nextH, nextM] = nextEv.startTime.split(':').map((v) => parseInt(v, 10));
     const nextTotal = nextH * 60 + nextM;
@@ -475,7 +412,7 @@ function fallbackOrchestrationDecision(params: {
         providerName: nextEv.providerName,
         providerPhone: nextEv.providerPhone,
         newStartTime: adjustedStart,
-        whatsappMessage: `السلام عليكم ورحمة الله، حياك الله أخوي ${nextEv.providerName} 👋\n\nمعك منسق العمليات في There DMC.\nحابين نبلغكم بخصوص حجز وفد (${travelerNationality}) عددهم ${groupSize} أشخاص اليوم، صار في تأخير خارج عن الإرادة في الجولة السابقة، وبناءً عليه نقدر وصول الوفد لكم الساعة ${adjustedStart} بدلاً من ${nextEv.startTime}.\n\nالله يسعدك ودنا نتأكد هل هذا التوقيت مناسب وجاهزيتكم لاستقبالهم؟\nشاكرين ومقدرين تعاونكم الدائم 🙏`,
+        whatsappMessage: `السلام عليكم ورحمة الله، حياك الله أخوي ${nextEv.providerName}\n\nمعك منسق العمليات في There DMC.\nحابين نبلغكم بخصوص حجز وفد (${travelerNationality}) عددهم ${groupSize} أشخاص اليوم، صار في تأخير خارج عن الإرادة في الجولة السابقة، وبناءً عليه نقدر وصول الوفد لكم الساعة ${adjustedStart} بدلاً من ${nextEv.startTime}.\n\nالله يسعدك ودنا نتأكد هل هذا التوقيت مناسب وجاهزيتكم لاستقبالهم؟\nشاكرين ومقدرين تعاونكم الدائم`,
       });
 
       prevEndTime = adjustedEnd;
@@ -490,7 +427,7 @@ function fallbackOrchestrationDecision(params: {
   const travelerNotification = isJapanese
     ? {
         language: 'Japanese (日本語)',
-        flag: '🇯🇵',
+        flag: 'JP',
         title: 'ツアースケジュール更新のお知らせ',
         message: `お客様各位、前後の観光行程の都合により、本日のツアー開始時刻が ${newTargetStart} に変更となりました。ご不便をおかけしますが、最高の体験をお届けできるよう準備しております。何卒よろしくお願い申し上げます。`,
         translatedSummaryInArabic: `إشعار باليابانية: تم إبلاغ الوفد بترحيل موعد الجولة إلى ${newTargetStart} مع التأكيد على سلامتهم وراحتهم.`,
@@ -498,14 +435,14 @@ function fallbackOrchestrationDecision(params: {
     : isItalian
     ? {
         language: 'Italian (Italiano)',
-        flag: '🇮🇹',
+        flag: 'IT',
         title: 'Aggiornamento Orario Itinerario',
         message: `Gentili ospiti, a causa di un lieve ritardo nell'attività precedente, il nuovo orario di inizio è previsto per le ${newTargetStart}. Ci scusiamo per l'inconveniente e vi ringraziamo per la comprensione.`,
         translatedSummaryInArabic: `إشعار بالإيطالية: تم إبلاغ الوفد بترحيل موعد الجولة إلى ${newTargetStart} مع الاعتذار والشكر لتفهمهم.`,
       }
     : {
         language: 'English',
-        flag: '🇬🇧',
+        flag: 'EN',
         title: 'Schedule Update Notification',
         message: `Dear Guests, due to a minor delay in the previous experience, your upcoming activity will now commence at ${newTargetStart}. We appreciate your patience and look forward to delivering a wonderful experience.`,
         translatedSummaryInArabic: `إشعار بالإنجليزية: تم إبلاغ الوفد بترحيل الموعد إلى ${newTargetStart}.`,

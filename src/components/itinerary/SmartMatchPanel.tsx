@@ -21,14 +21,12 @@ export function SmartMatchPanel({
   onReMatch,
   onAddEvent,
 }: SmartMatchPanelProps) {
-  // Only show approved/verified providers in Smart Match recommendations
   const verifiedRecommendations = recommendations.filter(
     (rec) => rec.provider?.verificationStatus === 'verified'
   );
 
   return (
     <div className="w-80 shrink-0 space-y-4">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-violet-600" />
@@ -53,7 +51,6 @@ export function SmartMatchPanel({
         </div>
       </div>
 
-      {/* Cards */}
       {isLoading || isMatching ? (
         <div className="space-y-3">
           {Array.from({ length: 3 }).map((_, i) => (
@@ -83,8 +80,6 @@ export function SmartMatchPanel({
   );
 }
 
-// ─── Recommendation Card ─────────────────────────────────────
-
 function RecommendationCard({
   recommendation,
   rank,
@@ -105,7 +100,6 @@ function RecommendationCard({
 
   return (
     <div className="group w-full rounded-xl border border-gray-100 bg-white p-4 transition-all hover:border-violet-200 hover:shadow-md">
-      {/* Top row: rank + score */}
       <div className="flex items-center justify-between">
         <span className="flex h-5 w-5 items-center justify-center rounded-full bg-gray-100 text-[10px] font-bold text-gray-500">
           {rank}
@@ -113,7 +107,6 @@ function RecommendationCard({
         <ScoreBadge score={matchScore} />
       </div>
 
-      {/* Provider info */}
       <div className="mt-3">
         <div className="flex items-center gap-1.5">
           <h3 className="text-sm font-bold text-gray-900 truncate">{provider.name}</h3>
@@ -135,7 +128,6 @@ function RecommendationCard({
         </div>
       </div>
 
-      {/* Tags */}
       <div className="mt-2.5 flex items-center gap-1.5">
         <Badge label={provider.experienceType} variant="default" size="sm" />
         <Badge
@@ -148,7 +140,6 @@ function RecommendationCard({
         )}
       </div>
 
-      {/* Reasons */}
       <div className="mt-3 space-y-1">
         {reasons.slice(0, 3).map((reason) => (
           <p key={reason} className="text-[11px] leading-snug text-gray-500">
@@ -157,7 +148,6 @@ function RecommendationCard({
         ))}
       </div>
 
-      {/* Action Button */}
       <div className="mt-3.5 pt-3 border-t border-gray-100 flex items-center justify-between">
         <span className="text-[11px] font-medium text-gray-400">
           {provider.experienceType}
@@ -176,8 +166,6 @@ function RecommendationCard({
     </div>
   );
 }
-
-// ─── Score Badge ─────────────────────────────────────────────
 
 function ScoreBadge({ score }: { score: number }) {
   const color =

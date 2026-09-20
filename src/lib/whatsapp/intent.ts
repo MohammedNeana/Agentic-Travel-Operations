@@ -19,10 +19,6 @@ export interface ClassifyIntentOptions {
   model?: string;
 }
 
-/**
- * Formats candidate provider events into a readable structured prompt block
- * for the LLM to perform group disambiguation.
- */
 function formatCandidateEventsForPrompt(events: CandidateGroupEvent[]): string {
   if (!events || events.length === 0) {
     return 'No specific pre-registered candidate groups provided.';
@@ -49,11 +45,6 @@ function formatCandidateEventsForPrompt(events: CandidateGroupEvent[]): string {
     .join('\n\n');
 }
 
-/**
- * Classifies transcribed voice notes or text messages using Groq's LLM API,
- * with intelligent multi-group disambiguation (identifying which group is running now,
- * upcoming, or delayed/experiencing an emergency).
- */
 export async function classifyVoiceIntent(
   transcriptionText: string,
   optionsOrApiKey?: string | ClassifyIntentOptions,
@@ -117,7 +108,7 @@ YOUR CRITICAL OBJECTIVES:
      * NO static templates or robotic bot phrases. Keep the conversation open and fluid!
      * Specifically reference the candidate groups they have with distinguishing traits (e.g. mention the running group in the morning vs. the upcoming afternoon group of 6 people, or their respective times/nationalities).
      * Ask them politely to clarify which group they meant so you can take immediate action and update the schedule.
-     * Encourage them to reply simply with a quick text or voice note (e.g. "تقدر ترد علي هنا مباشرة برسالة أو فويس نوت عشان ننسق معك فوراً 🙏").
+     * Encourage them to reply simply with a quick text or voice note.
    - If "isAmbiguous" is false, "clarificationMessage" should be null.
 
 Respond ONLY with valid JSON in this exact structure:
@@ -174,9 +165,6 @@ Respond ONLY with valid JSON in this exact structure:
         );
         if (response.status === 404 || response.status === 400) {
           lastError = err;
-          console.warn(
-            `Groq model ${currentModel} returned HTTP ${response.status}, trying next available model...`
-          );
           continue;
         }
         throw err;
@@ -223,23 +211,12 @@ Respond ONLY with valid JSON in this exact structure:
       }
 
       let clarificationMessage = parsed.clarificationMessage?.trim() || undefined;
-      // Dynamic fallback if isAmbiguous is true but LLM omitted clarificationMessage
       if (parsed.isAmbiguous && !clarificationMessage && candidateEvents && candidateEvents.length > 1) {
         const groupsList = candidateEvents
           .map((c) => `رحلة (${c.timePeriod || c.startTime}) لـ ${c.nationality || 'وفد'}`)
           .join(' أو ');
-        clarificationMessage = `حياك الله أخوي الكريم 👋، الله يسعدك بس للتأكيد قصدك ${groupsList}؟ رد علي هنا برسالة أو فويس نوت عشان ننسق فوراً ونحدث الجدول 🙏`;
+        clarificationMessage = `حياك الله أخوي الكريم، الله يسعدك بس للتأكيد قصدك ${groupsList}؟ رد علي هنا برسالة أو فويس نوت عشان ننسق فوراً ونحدث الجدول`;
       }
-
-      console.log(`[Groq Intent] Successfully classified WhatsApp message with ${currentModel}:`, {
-        category,
-        matchedEventId,
-        matchedGroupSummary,
-        isAmbiguous: Boolean(parsed.isAmbiguous),
-        clarificationMessage: clarificationMessage ? `${clarificationMessage.slice(0, 50)}...` : null,
-        isEscalationRequired,
-        reason: parsed.reason,
-      });
 
       return {
         category,
@@ -263,7 +240,4 @@ Respond ONLY with valid JSON in this exact structure:
   throw lastError || new Error('Failed to classify WhatsApp message intent with available Groq models.');
 }
 
-/**
- * Alias for classifying any WhatsApp message (text body or transcribed audio).
- */
 export const classifyWhatsAppMessageIntent = classifyVoiceIntent;

@@ -70,7 +70,6 @@ export function TimelineView({
     );
   }
 
-  // Group events by date
   const grouped = groupByDate(events);
 
   return (
@@ -79,7 +78,7 @@ export function TimelineView({
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-bold text-gray-900">{ar.timeline.title}</h2>
           <span className="text-[11px] font-semibold text-violet-700 bg-violet-50 px-2 py-0.5 rounded-full border border-violet-200">
-            يدعم السحب والإفلات وتعديل المواعيد ⏱️
+            يدعم السحب والإفلات وتعديل المواعيد
           </span>
         </div>
         <span className="text-xs text-gray-400 font-medium">
@@ -89,7 +88,6 @@ export function TimelineView({
 
       {Object.entries(grouped).map(([date, dateEvents]) => (
         <div key={date}>
-          {/* Date Header */}
           <div className="mb-3.5 flex items-center gap-3">
             <div className="h-px flex-1 bg-gray-200" />
             <span
@@ -101,9 +99,7 @@ export function TimelineView({
             <div className="h-px flex-1 bg-gray-200" />
           </div>
 
-          {/* Event Cards */}
           <div className="relative space-y-3 ps-6">
-            {/* Timeline line */}
             <div className="absolute start-[9px] top-2 bottom-2 w-px bg-gray-200" />
 
             {dateEvents.map((event) => (
@@ -141,8 +137,6 @@ export function TimelineView({
     </div>
   );
 }
-
-// ─── Event Card ──────────────────────────────────────────────
 
 function EventCard({
   event,
@@ -216,7 +210,6 @@ function EventCard({
             : 'border-gray-100 hover:border-gray-200 hover:shadow-md'
       }`}
     >
-      {/* Timeline dot */}
       <div className="absolute -start-[15px] top-5 flex h-[18px] w-[18px] items-center justify-center rounded-full border-2 border-white bg-gray-900 shadow-xs">
         <div className="h-1.5 w-1.5 rounded-full bg-white" />
       </div>
@@ -224,7 +217,6 @@ function EventCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            {/* Drag Handle Grip Icon */}
             <div
               className="cursor-grab active:cursor-grabbing p-0.5 -ms-1 text-gray-300 hover:text-gray-600 rounded transition-colors"
               title="اسحب الفعالية لتبديل موعدها وترتيبها مع فعالية أخرى"
@@ -246,7 +238,6 @@ function EventCard({
             </p>
           )}
 
-          {/* Time & Location Controls */}
           <div className="mt-3 flex items-center gap-3 text-xs text-gray-400 flex-wrap">
             {isEditingTime ? (
               <div
@@ -361,9 +352,20 @@ function EventCard({
       )}
 
       {event.status === 'escalated' && event.escalationReason && (() => {
-        const parts = event.escalationReason.split('🌐');
-        const opsReason = parts[0].trim();
-        const travelerNotice = parts[1]?.trim();
+        let opsReason = event.escalationReason;
+        let travelerNotice: string | undefined;
+
+        if (event.escalationReason.includes('\u{1F310}')) {
+          const parts = event.escalationReason.split('\u{1F310}');
+          opsReason = parts[0].trim();
+          travelerNotice = parts[1]?.trim();
+        } else if (event.escalationReason.includes(']: "')) {
+          const match = event.escalationReason.match(/^(.*?)\s*\[([A-Z]{2})\]:\s*"(.*?)"$/);
+          if (match) {
+            opsReason = match[1].trim();
+            travelerNotice = `[${match[2]}] ${match[3].trim()}`;
+          }
+        }
 
         return (
           <div className="mt-3 space-y-2">
@@ -402,8 +404,6 @@ function EventCard({
   );
 }
 
-// ─── Skeleton ────────────────────────────────────────────────
-
 function TimelineSkeleton() {
   return (
     <div className="flex-1 space-y-6">
@@ -423,8 +423,6 @@ function TimelineSkeleton() {
     </div>
   );
 }
-
-// ─── Helpers ─────────────────────────────────────────────────
 
 function groupByDate(events: ItineraryEvent[]): Record<string, ItineraryEvent[]> {
   return events.reduce<Record<string, ItineraryEvent[]>>((acc, event) => {

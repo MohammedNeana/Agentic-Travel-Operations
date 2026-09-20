@@ -1,5 +1,3 @@
-// Core domain types for the DMC Itinerary Builder
-
 export interface TravelerProfile {
   id: string;
   tenantId?: string;

@@ -18,7 +18,6 @@ export function AuthGuard({ children }: AuthGuardProps) {
   useEffect(() => {
     const supabase = createBrowserSupabaseClient();
 
-    // Check current session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setIsChecking(false);
@@ -30,7 +29,6 @@ export function AuthGuard({ children }: AuthGuardProps) {
       }
     });
 
-    // Listen to changes in auth state
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
       setSession(currentSession);
       setIsChecking(false);
@@ -47,12 +45,10 @@ export function AuthGuard({ children }: AuthGuardProps) {
     };
   }, [pathname, router]);
 
-  // If on /login, render children immediately (login page handles its own UI)
   if (pathname === '/login') {
     return <>{children}</>;
   }
 
-  // Show loading spinner while determining auth state on protected routes
   if (isChecking) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -64,7 +60,6 @@ export function AuthGuard({ children }: AuthGuardProps) {
     );
   }
 
-  // If unauthenticated and redirecting, render minimal placeholder
   if (!session) {
     return null;
   }

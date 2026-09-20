@@ -1,10 +1,4 @@
-/**
- * Arabic (ar-SA) translation dictionary.
- * All static UI strings live here for single-source-of-truth localisation.
- */
-
 const ar = {
-  // ─── App Shell ─────────────────────────────────────────────
   meta: {
     title: 'There DMC — أداة بناء الرحلات الذكية',
     description: 'أداة بناء رحلات مدعومة بالذكاء الاصطناعي لشركات إدارة الوجهات السعودية',
@@ -16,7 +10,6 @@ const ar = {
     saveItinerary: 'حفظ الرحلة',
   },
 
-  // ─── Traveler Profile Sidebar ──────────────────────────────
   sidebar: {
     title: 'الملف الشخصي للمسافر',
     noProfile: 'لم يتم تحميل ملف مسافر.',
@@ -29,7 +22,6 @@ const ar = {
     mobilityNote: 'ملاحظة التنقل',
   },
 
-  // ─── Timeline ──────────────────────────────────────────────
   timeline: {
     title: 'الجدول الزمني للرحلة',
     events: 'فعاليات',
@@ -37,7 +29,6 @@ const ar = {
     noEventsCta: '← أضف تجارب من لوحة التوصيات الذكية',
   },
 
-  // ─── Smart Match Panel ─────────────────────────────────────
   smartMatch: {
     title: 'التوصيات الذكية',
     subtitle: 'مُرتبة بالذكاء الاصطناعي',
@@ -45,7 +36,6 @@ const ar = {
     addToItinerary: 'أضف إلى الرحلة',
   },
 
-  // ─── Statuses ──────────────────────────────────────────────
   status: {
     draft: 'مسودة',
     confirmed: 'مؤكد',
@@ -56,14 +46,12 @@ const ar = {
     completed: 'مكتمل',
   } as Record<string, string>,
 
-  // ─── Verification Statuses ─────────────────────────────────
   verification: {
     verified: 'موثق',
     pending: 'قيد المراجعة',
     rejected: 'مرفوض',
   } as Record<string, string>,
 
-  // ─── Budget Tiers ──────────────────────────────────────────
   budget: {
     economy: 'اقتصادي',
     standard: 'عادي',
@@ -71,7 +59,6 @@ const ar = {
     luxury: 'فاخر',
   } as Record<string, string>,
 
-  // ─── Warning Messages ─────────────────────────────────────
   warnings: {
     schedulingConflict: 'تم اكتشاف تعارض في الجدول',
     capacityConcern: 'ملاحظة حول السعة',

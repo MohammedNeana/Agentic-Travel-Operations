@@ -11,8 +11,6 @@
   --font-sans: var(--font-ibm-arabic), system-ui, -apple-system, sans-serif;
 }
 
-/* ─── Base ────────────────────────────────────────────────── */
-
 body {
   background: var(--background);
   color: var(--foreground);
@@ -20,8 +18,6 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
-
-/* ─── Custom scrollbar for a polished feel ────────────────── */
 
 ::-webkit-scrollbar {
   width: 6px;
@@ -41,13 +37,9 @@ body {
   background: #a1a1aa;
 }
 
-/* ─── Smooth transitions globally ─────────────────────────── */
-
 * {
   scroll-behavior: smooth;
 }
-
-/* ─── Focus ring for accessibility ────────────────────────── */
 
 :focus-visible {
   outline: 2px solid #6366f1;

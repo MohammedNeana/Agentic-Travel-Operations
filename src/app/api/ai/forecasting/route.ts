@@ -93,7 +93,6 @@ Respond ONLY with valid JSON in this exact structure:
       forecast: result.data,
     });
   } catch (error) {
-    console.error('Error in POST /api/ai/forecasting:', error);
     return NextResponse.json(
       {
         success: false,

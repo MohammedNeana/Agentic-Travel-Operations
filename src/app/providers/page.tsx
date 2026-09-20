@@ -40,28 +40,23 @@ interface ExperienceProviderItem {
   created_at: string;
 }
 
-const AUTO_SEARCH_SUGGESTIONS = [
-  'مخيمات مراقبة النجوم في العلا',
-  'رحلات غوص في جدة والشعاب المرجانية',
-  'سفاري صحراوي وقيادة الكثبان في الرياض',
-  'مسارات هايكنج جبلية في أبها وعسير',
-];
-
-const SAMPLE_PROVIDER_TEXTS = [
-  'مخيم نجوم العلا الفاخر في قلب وادي عِشار. نقدم تجارب مراقبة النجوم مع فلكيين سعوديين معتمدين، وحفلات عشاء تراثية خاصة تحت ضوء القمر. السعة الاستيعابية للمخيم حتى 25 ضيفاً مع خدمة نقل خاصة بدفع رباعي. للحجز والاستفسار عبر واتساب: +966501234567',
-  'فريق دروب عسير للمغامرات الجبلية في أبها. تنظيم مسارات هايكنج احترافية في جبال السودة ووادي لجب، مع إرشاد سياحي محلي ووجبات عسيرية شعبية. السعة اليومية 15 مغامراً. للتواصل واتساب: 0558765432',
-  'جولات جدة التاريخية الأصيلة. رحلات استكشافية ثقافية في حارة المظلوم وسوق العلوي مع مرشدين تراثيين مرخصين، وزيارة البيوت التاريخية وتذوق المأكولات الحجازية. سعة الجولة 12 شخصاً. هاتف وواتساب: +966549871234',
-];
-
 export default function ProvidersPage() {
   const [providers, setProviders] = useState<ExperienceProviderItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [tenantId, setTenantId] = useState<string>('a1b2c3d4-0001-4000-8000-000000000001');
 
-  // Sourcing Console Mode: 'auto' (Autonomous Web Search) | 'url' (Direct URL) | 'text' (Manual / Raw text)
+  const dynamicSuggestions = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of providers) {
+      if (p.experience_type && p.city) {
+        set.add(`${p.experience_type} في ${p.city}`);
+      }
+    }
+    return Array.from(set).slice(0, 4);
+  }, [providers]);
+
   const [sourcingMode, setSourcingMode] = useState<'auto' | 'url' | 'text'>('auto');
 
-  // Autonomous Web Search State
   const [autoSearchQuery, setAutoSearchQuery] = useState('');
   const [isAutoSearching, setIsAutoSearching] = useState(false);
   const [autoSearchStep, setAutoSearchStep] = useState<string>('');
@@ -72,20 +67,17 @@ export default function ProvidersPage() {
   } | null>(null);
   const [autoSearchError, setAutoSearchError] = useState<string | null>(null);
 
-  // Direct URL / Text State
   const [discoveryUrl, setDiscoveryUrl] = useState('');
   const [rawText, setRawText] = useState('');
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractionResult, setExtractionResult] = useState<ExperienceProviderItem | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCity, setSelectedCity] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
-  // Load providers from Supabase
   const loadProviders = async (tId: string) => {
     setIsLoading(true);
     try {
@@ -96,13 +88,10 @@ export default function ProvidersPage() {
         .eq('tenant_id', tId)
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Error fetching providers:', error);
-      } else if (data) {
+      if (data && !error) {
         setProviders(data as ExperienceProviderItem[]);
       }
-    } catch (err) {
-      console.error('Unexpected error loading providers:', err);
+    } catch {
     } finally {
       setIsLoading(false);
     }
@@ -117,7 +106,6 @@ export default function ProvidersPage() {
     });
   }, []);
 
-  // Handle Autonomous AI Web Search
   const handleAutoSearchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!autoSearchQuery.trim() || isAutoSearching) return;
@@ -182,7 +170,6 @@ export default function ProvidersPage() {
     }
   };
 
-  // Handle Direct URL or Text Submission
   const handleDirectSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const hasUrl = sourcingMode === 'url' && discoveryUrl.trim();
@@ -224,7 +211,6 @@ export default function ProvidersPage() {
     }
   };
 
-  // Handle Approve Provider
   const handleApproveProvider = async (id: string) => {
     try {
       setActionLoadingId(id);
@@ -235,7 +221,6 @@ export default function ProvidersPage() {
         .eq('id', id);
 
       if (error) {
-        console.error('Error approving provider:', error);
         alert('فشل في اعتماد المزود: ' + error.message);
         return;
       }
@@ -243,14 +228,12 @@ export default function ProvidersPage() {
       setProviders((prev) =>
         prev.map((p) => (p.id === id ? { ...p, verification_status: 'verified' } : p))
       );
-    } catch (err) {
-      console.error('Unexpected error approving provider:', err);
+    } catch {
     } finally {
       setActionLoadingId(null);
     }
   };
 
-  // Handle Delete Provider
   const handleDeleteProvider = async (id: string, name: string) => {
     if (!window.confirm(`هل أنت متأكد من حذف المزود "${name}" نهائياً من قاعدة البيانات؟`)) {
       return;
@@ -265,26 +248,22 @@ export default function ProvidersPage() {
         .eq('id', id);
 
       if (error) {
-        console.error('Error deleting provider:', error);
         alert('فشل في حذف المزود: ' + error.message);
         return;
       }
 
       setProviders((prev) => prev.filter((p) => p.id !== id));
-    } catch (err) {
-      console.error('Unexpected error deleting provider:', err);
+    } catch {
     } finally {
       setActionLoadingId(null);
     }
   };
 
-  // Distinct cities for filter
   const cities = useMemo(() => {
     const unique = Array.from(new Set(providers.map((p) => p.city).filter(Boolean)));
     return unique;
   }, [providers]);
 
-  // Executive Stats
   const stats = useMemo(() => {
     return {
       total: providers.length,
@@ -294,7 +273,6 @@ export default function ProvidersPage() {
     };
   }, [providers, cities]);
 
-  // Filtered providers
   const filteredProviders = useMemo(() => {
     return providers.filter((provider) => {
       const matchesSearch =
@@ -313,7 +291,6 @@ export default function ProvidersPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
-      {/* Top Header & Executive Overview */}
       <div className="bg-white border-b border-slate-200/80">
         <div className="mx-auto max-w-7xl px-6 py-6">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
@@ -334,7 +311,6 @@ export default function ProvidersPage() {
               </p>
             </div>
 
-            {/* Live Metrics Row */}
             <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
               <div className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2">
                 <Building2 className="h-4 w-4 text-slate-400" />
@@ -382,11 +358,8 @@ export default function ProvidersPage() {
         </div>
       </div>
 
-      {/* Main Container */}
       <div className="mx-auto max-w-7xl px-6 pt-6 space-y-6">
-        {/* Unified Sourcing Console */}
         <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs">
-          {/* Header & Mode Segmented Control */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-100">
             <div>
               <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
@@ -400,7 +373,6 @@ export default function ProvidersPage() {
               </p>
             </div>
 
-            {/* Segmented Mode Selector */}
             <div className="flex items-center rounded-xl bg-slate-100 p-1 text-xs font-semibold self-start sm:self-auto">
               <button
                 type="button"
@@ -443,7 +415,6 @@ export default function ProvidersPage() {
             </div>
           </div>
 
-          {/* Sourcing Mode 1: Autonomous Web Search */}
           {sourcingMode === 'auto' && (
             <div className="pt-5 space-y-4">
               <form onSubmit={handleAutoSearchSubmit} className="space-y-3">
@@ -481,23 +452,23 @@ export default function ProvidersPage() {
                   </button>
                 </div>
 
-                {/* Suggestions Pills */}
-                <div className="flex items-center gap-2 flex-wrap pt-1">
-                  <span className="text-[11px] font-semibold text-slate-400">اقتراحات سريعة:</span>
-                  {AUTO_SEARCH_SUGGESTIONS.map((sugg, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      disabled={isAutoSearching}
-                      onClick={() => setAutoSearchQuery(sugg)}
-                      className="rounded-lg bg-slate-100 hover:bg-slate-200/80 px-2.5 py-1 text-[11px] font-medium text-slate-700 transition-colors cursor-pointer"
-                    >
-                      {sugg}
-                    </button>
-                  ))}
-                </div>
+                {dynamicSuggestions.length > 0 && (
+                  <div className="flex items-center gap-2 flex-wrap pt-1">
+                    <span className="text-[11px] font-semibold text-slate-400">اقتراحات من المزودين الحاليين:</span>
+                    {dynamicSuggestions.map((sugg, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        disabled={isAutoSearching}
+                        onClick={() => setAutoSearchQuery(sugg)}
+                        className="rounded-lg bg-slate-100 hover:bg-slate-200/80 px-2.5 py-1 text-[11px] font-medium text-slate-700 transition-colors cursor-pointer"
+                      >
+                        {sugg}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
-                {/* Linear Multi-Step Progress State */}
                 {isAutoSearching && (
                   <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 space-y-2">
                     <div className="flex items-center justify-between">
@@ -527,14 +498,12 @@ export default function ProvidersPage() {
                   </div>
                 )}
 
-                {/* Error Banner */}
                 {autoSearchError && (
                   <div className="rounded-xl bg-red-50 border border-red-200 p-3.5 text-xs font-semibold text-red-700">
                     {autoSearchError}
                   </div>
                 )}
 
-                {/* Success Card Breakdown */}
                 {autoSearchResult && (
                   <div className="rounded-xl bg-emerald-50/60 border border-emerald-200 p-4 space-y-3">
                     <div className="flex items-center justify-between">
@@ -577,7 +546,6 @@ export default function ProvidersPage() {
             </div>
           )}
 
-          {/* Sourcing Mode 2: Direct URL Scraping */}
           {sourcingMode === 'url' && (
             <div className="pt-5 space-y-4">
               <form onSubmit={handleDirectSubmit} className="space-y-3">
@@ -640,27 +608,13 @@ export default function ProvidersPage() {
             </div>
           )}
 
-          {/* Sourcing Mode 3: Manual Text Input */}
           {sourcingMode === 'text' && (
             <div className="pt-5 space-y-4">
               <form onSubmit={handleDirectSubmit} className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-700">
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block">
                     النص غير المهيكل (رسالة واتساب، منشور إنستغرام، نبذة تعريفية):
                   </label>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] text-slate-400 font-medium">نماذج جاهزة:</span>
-                    {SAMPLE_PROVIDER_TEXTS.map((sample, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => setRawText(sample)}
-                        className="rounded-md bg-slate-100 hover:bg-slate-200/80 px-2 py-0.5 text-[10px] font-semibold text-slate-700 transition-colors cursor-pointer"
-                      >
-                        نموذج {idx + 1}
-                      </button>
-                    ))}
-                  </div>
                 </div>
 
                 <textarea
@@ -702,7 +656,6 @@ export default function ProvidersPage() {
           )}
         </div>
 
-        {/* Directory Controls & Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-2">
           <div className="flex items-center gap-2">
             <Building2 className="h-4 w-4 text-slate-700" />
@@ -715,7 +668,6 @@ export default function ProvidersPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
-            {/* Search Input */}
             <div className="relative">
               <Search className="absolute inset-y-0 start-0 ps-3 flex items-center pointer-events-none h-4 w-4 text-slate-400 my-auto" />
               <input
@@ -727,7 +679,6 @@ export default function ProvidersPage() {
               />
             </div>
 
-            {/* City Dropdown */}
             <select
               value={selectedCity}
               onChange={(e) => setSelectedCity(e.target.value)}
@@ -741,7 +692,6 @@ export default function ProvidersPage() {
               ))}
             </select>
 
-            {/* Status Dropdown */}
             <select
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
@@ -755,7 +705,6 @@ export default function ProvidersPage() {
           </div>
         </div>
 
-        {/* Providers Cards Grid */}
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -781,7 +730,6 @@ export default function ProvidersPage() {
                 className="group rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs hover:border-slate-400 hover:shadow-md transition-all flex flex-col justify-between"
               >
                 <div>
-                  {/* Card Header: Title & Verification Badge */}
                   <div className="flex items-start justify-between gap-2.5">
                     <div className="flex items-center gap-1.5 flex-1 min-w-0">
                       <h3 className="text-sm font-bold text-slate-900 truncate" title={provider.name}>
@@ -810,7 +758,6 @@ export default function ProvidersPage() {
                     </span>
                   </div>
 
-                  {/* Metadata: Location & Capacity */}
                   <div className="mt-2.5 flex items-center gap-3.5 text-xs text-slate-500">
                     <span className="flex items-center gap-1">
                       <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
@@ -822,7 +769,6 @@ export default function ProvidersPage() {
                     </span>
                   </div>
 
-                  {/* Experience Tag & WhatsApp Action */}
                   <div className="mt-4 flex items-center justify-between gap-2 flex-wrap pt-3 border-t border-slate-100">
                     <span className="inline-block rounded-lg bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
                       {provider.experience_type}
@@ -850,7 +796,6 @@ export default function ProvidersPage() {
                   </div>
                 </div>
 
-                {/* Card Footer & Action Buttons */}
                 <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
                     <span>

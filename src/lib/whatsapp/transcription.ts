@@ -3,10 +3,6 @@ export interface TranscriptionResult {
   language: string;
 }
 
-/**
- * Transcribes Arabic voice notes using Groq's OpenAI-compatible Audio API (`whisper-large-v3`).
- * Base URL: https://api.groq.com/openai/v1
- */
 export async function transcribeArabicAudio(
   audioBuffer: Buffer,
   fileName = 'voice_note.ogg',

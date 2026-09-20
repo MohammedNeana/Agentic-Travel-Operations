@@ -36,13 +36,11 @@ export default function LoginPage() {
 
     try {
       if (isRegister) {
-        // Auto-generate tenant_id securely behind the scenes
         const isDefaultOrg = !companyName.trim() || companyName.trim().toLowerCase() === 'there dmc';
         const autoTenantId = isDefaultOrg
           ? 'a1b2c3d4-0001-4000-8000-000000000001'
           : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'a1b2c3d4-0001-4000-8000-000000000001');
 
-        // Sign Up with user metadata containing the auto-generated tenant_id
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password,
@@ -68,7 +66,6 @@ export default function LoginPage() {
           setIsRegister(false);
         }
       } else {
-        // Sign In
         const { data, error } = await supabase.auth.signInWithPassword({
           email: email.trim(),
           password,
@@ -103,7 +100,6 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        {/* Brand Header */}
         <div className="flex justify-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gray-900 text-white shadow-md">
             <Compass className="h-6 w-6 text-violet-400" />
@@ -116,7 +112,6 @@ export default function LoginPage() {
           بوابة الشركات السياحية السعودية المعتمدة لإدارة وتخصيص الرحلات
         </p>
 
-        {/* Tab Switcher */}
         <div className="mt-6 flex bg-gray-200/70 p-1 rounded-xl">
           <button
             type="button"
@@ -264,7 +259,6 @@ export default function LoginPage() {
             </div>
           </form>
 
-          {/* Quick Demo Credentials */}
           <div className="mt-6 pt-4 border-t border-gray-100">
             <p className="text-[11px] font-bold text-gray-700 mb-1">
               ملاحظة تجريبية سريعة:

@@ -48,7 +48,6 @@ export function TravelerProfileSidebar({
 
   return (
     <aside className="w-80 shrink-0 space-y-6 rounded-2xl border border-gray-100 bg-white p-6 shadow-xs">
-      {/* Header & Traveler Switcher */}
       <div>
         <div className="flex items-center justify-between">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
@@ -99,7 +98,6 @@ export function TravelerProfileSidebar({
 
       <hr className="border-gray-100" />
 
-      {/* Details */}
       <div className="space-y-4">
         <DetailRow
           icon={<Users className="h-4 w-4 text-gray-400" />}
@@ -125,7 +123,6 @@ export function TravelerProfileSidebar({
 
       <hr className="border-gray-100" />
 
-      {/* Interests */}
       <div>
         <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
           {ar.sidebar.interests}
@@ -137,7 +134,6 @@ export function TravelerProfileSidebar({
         </div>
       </div>
 
-      {/* Dietary */}
       {activeProfile.dietaryRestrictions.length > 0 && (
         <div>
           <p className="mb-2.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
@@ -152,7 +148,6 @@ export function TravelerProfileSidebar({
         </div>
       )}
 
-      {/* Mobility */}
       {activeProfile.mobilityNotes && (
         <div className="rounded-xl bg-blue-50/70 p-3.5 border border-blue-100">
           <p className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider text-blue-700">
@@ -167,8 +162,6 @@ export function TravelerProfileSidebar({
     </aside>
   );
 }
-
-// ─── Sub-components ──────────────────────────────────────────
 
 function DetailRow({
   icon,

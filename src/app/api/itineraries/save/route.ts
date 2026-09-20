@@ -52,7 +52,6 @@ export async function POST(req: NextRequest) {
     const supabase = createServerSupabaseClient();
     const fallbackTenantId = tenantId;
 
-    // Resolve traveler details for vendor notification (strictly omitting name for privacy)
     let finalNationality = travelerNationality;
     let finalGroupSize = groupSize;
     let finalDietary = dietaryRestrictions;
@@ -84,40 +83,25 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 1. Fetch current existing events in the database for this itinerary
-    const { data: existingEvents, error: fetchErr } = await supabase
+    const { data: existingEvents } = await supabase
       .from('itinerary_events')
       .select('id')
       .eq('itinerary_id', itineraryId);
-
-    if (fetchErr) {
-      console.error('Failed to fetch existing events for sync:', fetchErr);
-    }
 
     const currentDbIds = (existingEvents || []).map((e) => e.id);
     const existingDbIdSet = new Set(currentDbIds);
     const newEventIds = new Set(events.map((e) => e.id));
 
-    // Detect events that are genuinely newly added in this save action
     const newlyAddedEvents = events.filter((ev) => !existingDbIdSet.has(ev.id));
 
-
-    // 2. Delete events that were removed by the user
     const idsToDelete = currentDbIds.filter((id) => !newEventIds.has(id));
     if (idsToDelete.length > 0) {
-      const { error: deleteErr } = await supabase
+      await supabase
         .from('itinerary_events')
         .delete()
         .in('id', idsToDelete);
-
-      if (deleteErr) {
-        console.error('Failed to delete removed events:', deleteErr);
-      } else {
-        console.log(`Deleted ${idsToDelete.length} removed events`);
-      }
     }
 
-    // 3. Upsert current local events into Supabase
     if (events.length > 0) {
       const rowsToUpsert = events.map((ev, index) => {
         const start = ev.startTime
@@ -153,23 +137,18 @@ export async function POST(req: NextRequest) {
         .upsert(rowsToUpsert, { onConflict: 'id' });
 
       if (upsertErr) {
-        console.error('Failed to upsert itinerary events:', upsertErr);
         return NextResponse.json(
           { success: false, error: upsertErr.message },
           { status: 500 }
         );
       }
-
-      console.log(`Successfully synced ${rowsToUpsert.length} events for itinerary ${itineraryId}`);
     }
 
-    // 4. Update updated_at timestamp on the itinerary
     await supabase
       .from('itineraries')
       .update({ updated_at: new Date().toISOString() })
       .eq('id', itineraryId);
 
-    // 5. Send outbound WhatsApp booking notifications for newly added events
     const outboundNotifications: Array<{
       eventId: string;
       title: string;
@@ -180,12 +159,7 @@ export async function POST(req: NextRequest) {
     }> = [];
 
     if (newlyAddedEvents.length > 0) {
-      console.log(
-        `Detected ${newlyAddedEvents.length} newly added events. Triggering provider notifications...`
-      );
-
       for (const ev of newlyAddedEvents) {
-        // Only notify planned events
         if (ev.status && ev.status !== 'planned') {
           continue;
         }
@@ -193,7 +167,6 @@ export async function POST(req: NextRequest) {
         let providerPhone: string | null = null;
         let providerName: string = ev.title;
 
-        // Fetch experience provider phone from DB if available
         if (ev.experienceProviderId) {
           const { data: providerData } = await supabase
             .from('experience_providers')
@@ -240,7 +213,6 @@ export async function POST(req: NextRequest) {
       outboundNotifications,
     });
   } catch (error) {
-    console.error('Error in POST /api/itineraries/save:', error);
     return NextResponse.json(
       {
         success: false,

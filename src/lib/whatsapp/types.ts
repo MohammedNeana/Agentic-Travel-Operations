@@ -1,8 +1,3 @@
-/**
- * Strictly typed definitions for WhatsApp Cloud API Webhook payloads,
- * message structures, media metadata, and voice intent classification.
- */
-
 export interface WhatsAppProfile {
   name: string;
 }
@@ -94,8 +89,6 @@ export interface WhatsAppWebhookPayload {
   entry: WhatsAppEntry[];
 }
 
-// ─── Domain Processing Types ─────────────────────────────────
-
 export interface ParsedButtonAction {
   type: 'accept_booking' | 'reject_booking';
   eventId: string;
@@ -129,9 +122,9 @@ export interface CandidateGroupEvent {
   eventDate: string;
   startTime: string;
   endTime: string;
-  timePeriod?: string; // e.g. "صباحاً (Morning)" or "عصراً/مساءً (Afternoon)"
+  timePeriod?: string;
   timeContext?: 'running_now' | 'upcoming_today' | 'past_today' | 'future_date' | 'past_date';
-  timeContextDescription?: string; // e.g. "جاري حالياً" or "بعد قليل / اليوم عصراً"
+  timeContextDescription?: string;
   status: string;
   nationality?: string;
   groupSize?: number;
@@ -167,8 +160,6 @@ export interface WebhookProcessingResult {
   details?: Record<string, unknown>;
   error?: string;
 }
-
-// ─── AI Operations Orchestration Types ─────────────────────────
 
 export interface ScheduleAdjustment {
   eventId: string;
@@ -217,8 +208,6 @@ export interface OrchestrationExecutionResult {
   error?: string;
 }
 
-// ─── Outbound Notification Types ──────────────────────────────
-
 export interface ProviderNotificationDetails {
   id?: string;
   title: string;
@@ -240,4 +229,3 @@ export interface OutboundNotificationResult {
   error?: string;
   mode?: 'interactive' | 'text' | 'template';
 }
-
