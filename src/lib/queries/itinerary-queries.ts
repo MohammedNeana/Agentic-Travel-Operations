@@ -174,14 +174,14 @@ interface DbTravelerProfile {
 }
 
 export async function getTravelerProfiles(
-  tenantId = 'a1b2c3d4-0001-4000-8000-000000000001'
+  tenantId?: string
 ): Promise<TravelerProfile[]> {
   const supabase = createServerSupabaseClient();
-  const { data, error } = await supabase
-    .from('traveler_profiles')
-    .select('*')
-    .eq('tenant_id', tenantId)
-    .order('created_at', { ascending: true });
+  let query = supabase.from('traveler_profiles').select('*');
+  if (tenantId && tenantId.trim().length > 0) {
+    query = query.eq('tenant_id', tenantId.trim());
+  }
+  const { data, error } = await query.order('created_at', { ascending: true });
 
   if (error) {
     return [];
@@ -204,7 +204,7 @@ export async function getTravelerProfiles(
 
 export async function getSmartMatchRecommendations(
   profile?: TravelerProfile | null,
-  tenantId = 'a1b2c3d4-0001-4000-8000-000000000001'
+  tenantId?: string
 ): Promise<SmartMatchRecommendation[]> {
   try {
     const interests = profile?.interests && profile.interests.length > 0
@@ -215,6 +215,15 @@ export async function getSmartMatchRecommendations(
     const queryText = `اهتمامات الزائر: ${interests.join('، ')} ${budgetInfo ? '| ' + budgetInfo : ''}`;
 
     const supabase = createServerSupabaseClient();
+    let effectiveTenantId = tenantId || profile?.tenantId;
+    if (!effectiveTenantId) {
+      const { data: org } = await supabase
+        .from('organizations')
+        .select('tenant_id')
+        .limit(1)
+        .maybeSingle();
+      effectiveTenantId = org?.tenant_id;
+    }
 
     const { data: unindexedProviders } = await supabase
       .from('experience_providers')
@@ -239,13 +248,17 @@ export async function getSmartMatchRecommendations(
 
     const queryEmbedding = await generateTextEmbedding(queryText);
 
-    const { data: rows, error } = await supabase.rpc('match_providers_hybrid', {
+    const rpcParams: Record<string, unknown> = {
       query_embedding: JSON.stringify(queryEmbedding),
       query_text: interests.join(' '),
       match_threshold: 0.0,
       match_count: 5,
-      p_tenant_id: tenantId,
-    });
+    };
+    if (effectiveTenantId) {
+      rpcParams.p_tenant_id = effectiveTenantId;
+    }
+
+    const { data: rows, error } = await supabase.rpc('match_providers_hybrid', rpcParams);
 
     if (error) {
       const providers = await getExperienceProviders();
