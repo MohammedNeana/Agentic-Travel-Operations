@@ -7,6 +7,7 @@ import {
   DownstreamVendorNotice,
 } from './types';
 import { callLLMJson } from '@/lib/ai/llm-client';
+import { validateOrchestrationDecision } from '@/lib/agent/action-validator';
 
 export async function orchestrateItineraryCascade(options: {
   eventId: string;
@@ -124,14 +125,49 @@ export async function orchestrateItineraryCascade(options: {
     });
   }
 
+  const validation = validateOrchestrationDecision(decision, {
+    targetEventDate: targetEvent.event_date,
+    knownEvents: enrichedEvents.map((e) => ({
+      id: e.eventId,
+      title: e.title,
+      date: e.date,
+      startTime: e.startTime,
+      endTime: e.endTime,
+      status: e.status,
+    })),
+  });
+
+  if (!validation.isValid || !validation.validatedDecision) {
+    const escalationReason = `AI Action Boundary Block: Schedule adjustments rejected due to domain constraint violations: ${validation.violations.join('; ')}`;
+    await supabase
+      .from('itinerary_events')
+      .update({
+        status: 'escalated',
+        escalation_reason: escalationReason,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', targetEvent.id);
+
+    return {
+      success: false,
+      updatedEventsCount: 0,
+      dispatchedNoticesCount: 0,
+      error: escalationReason,
+      incidentSummary: escalationReason,
+      validationViolations: validation.violations,
+    };
+  }
+
+  const validatedDecision = validation.validatedDecision;
+
   let updatedEventsCount = 0;
-  for (const adj of decision.scheduleAdjustments) {
+  for (const adj of validatedDecision.scheduleAdjustments) {
     const startStr = adj.newStartTime.length === 5 ? `${adj.newStartTime}:00` : adj.newStartTime;
     const endStr = adj.newEndTime.length === 5 ? `${adj.newEndTime}:00` : adj.newEndTime;
 
-    const baseReason = adj.reason || decision.incidentSummary;
-    const fullReason = decision.travelerNotification
-      ? `${baseReason} [${decision.travelerNotification.language}]: "${decision.travelerNotification.message}"`
+    const baseReason = adj.reason || validatedDecision.incidentSummary;
+    const fullReason = validatedDecision.travelerNotification
+      ? `${baseReason} [${validatedDecision.travelerNotification.language}]: "${validatedDecision.travelerNotification.message}"`
       : baseReason;
 
     const { error: updateErr } = await supabase
@@ -151,7 +187,7 @@ export async function orchestrateItineraryCascade(options: {
   }
 
   let dispatchedNoticesCount = 0;
-  for (const notice of decision.downstreamNotices) {
+  for (const notice of validatedDecision.downstreamNotices) {
     if (notice.whatsappMessage && notice.whatsappMessage.trim().length > 0) {
       const sendRes = await sendWhatsAppTextMessage(
         notice.providerPhone || '',
@@ -166,11 +202,11 @@ export async function orchestrateItineraryCascade(options: {
 
   return {
     success: true,
-    decision,
+    decision: validatedDecision,
     updatedEventsCount,
     dispatchedNoticesCount,
-    incidentSummary: decision.incidentSummary,
-    travelerNotification: decision.travelerNotification,
+    incidentSummary: validatedDecision.incidentSummary,
+    travelerNotification: validatedDecision.travelerNotification,
   };
 }
 

@@ -206,6 +206,7 @@ export interface OrchestrationExecutionResult {
   incidentSummary?: string;
   travelerNotification?: TravelerLocalizedNotification;
   error?: string;
+  validationViolations?: string[];
 }
 
 export interface ProviderNotificationDetails {
