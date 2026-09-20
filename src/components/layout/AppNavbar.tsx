@@ -37,8 +37,8 @@ export function AppNavbar() {
     };
   }, []);
 
-  // Hide navbar on login page
-  if (pathname === '/login') {
+  // Hide navbar on login page or deck print page
+  if (pathname === '/login' || pathname === '/deck') {
     return null;
   }
 

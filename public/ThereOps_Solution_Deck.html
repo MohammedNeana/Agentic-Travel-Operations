@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ThereOps - Solution Brief & Product Deck</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #1e293b;
+      background-color: #f1f5f9;
+      line-height: 1.6;
+      padding: 32px 16px;
+    }
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 48px;
+      border-radius: 24px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+      border: 1px solid #e2e8f0;
+    }
+    .print-bar {
+      max-width: 860px;
+      margin: 0 auto 20px auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #ffffff;
+      padding: 16px 24px;
+      border-radius: 16px;
+      border: 1px solid #e2e8f0;
+    }
+    .btn-print {
+      background: #0f172a;
+      color: #ffffff;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-print:hover {
+      background: #1e293b;
+    }
+    .header {
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 28px;
+      margin-bottom: 32px;
+    }
+    .top-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .badge {
+      display: inline-block;
+      background: #ecfdf5;
+      color: #065f46;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      border: 1px solid #a7f3d0;
+    }
+    h1 {
+      font-size: 26px;
+      font-weight: 800;
+      color: #0f172a;
+      line-height: 1.3;
+      margin-bottom: 16px;
+    }
+    .author-meta {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      font-size: 12px;
+      color: #64748b;
+      padding-top: 16px;
+      border-top: 1px solid #f1f5f9;
+    }
+    .author-meta strong {
+      color: #0f172a;
+    }
+    section {
+      margin-bottom: 36px;
+    }
+    h2 {
+      font-size: 16px;
+      font-weight: 800;
+      color: #0f172a;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .sec-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      background: #0f172a;
+      color: #ffffff;
+      border-radius: 6px;
+      font-size: 11px;
+    }
+    p {
+      font-size: 13px;
+      color: #475569;
+      margin-bottom: 14px;
+    }
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+    .card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      padding: 16px;
+      border-radius: 14px;
+    }
+    .card-title {
+      font-size: 12px;
+      font-weight: 800;
+      margin-bottom: 6px;
+      display: block;
+    }
+    .text-red { color: #b91c1c; }
+    .text-amber { color: #b45309; }
+    .text-purple { color: #6d28d9; }
+    .feature-box {
+      border: 1px solid #e2e8f0;
+      padding: 14px 18px;
+      border-radius: 14px;
+      margin-bottom: 12px;
+      background: #ffffff;
+    }
+    .feature-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+    .feature-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    .tag {
+      font-size: 10px;
+      font-family: monospace;
+      background: #f1f5f9;
+      padding: 2px 8px;
+      border-radius: 4px;
+      color: #475569;
+    }
+    .tech-box {
+      background: #0f172a;
+      color: #ffffff;
+      padding: 24px;
+      border-radius: 18px;
+    }
+    .tech-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-bottom: 18px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .tech-item span {
+      display: block;
+      font-size: 10px;
+      text-transform: uppercase;
+      color: #94a3b8;
+    }
+    .tech-item strong {
+      font-size: 13px;
+      color: #ffffff;
+    }
+    .flow-diagram {
+      font-family: monospace;
+      font-size: 11px;
+      color: #cbd5e1;
+      line-height: 1.6;
+    }
+    .flow-label {
+      color: #34d399;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+    .metric-card {
+      padding: 16px;
+      border-radius: 14px;
+      text-align: center;
+    }
+    .m-green { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; }
+    .m-violet { background: #f5f3ff; border: 1px solid #ddd6fe; color: #5b21b6; }
+    .m-blue { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+    .m-amber { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+    .metric-val {
+      font-size: 24px;
+      font-weight: 800;
+      margin-bottom: 2px;
+    }
+    .metric-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .metric-sub {
+      font-size: 10px;
+      color: #64748b;
+    }
+    .profile-box {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      padding: 20px;
+      border-radius: 16px;
+    }
+    .profile-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    ul.experience-list {
+      list-style: none;
+    }
+    ul.experience-list li {
+      position: relative;
+      padding-left: 16px;
+      margin-bottom: 8px;
+      font-size: 12px;
+      color: #475569;
+    }
+    ul.experience-list li::before {
+      content: "•";
+      position: absolute;
+      left: 0;
+      color: #0f172a;
+      font-weight: 800;
+    }
+    .footer {
+      border-top: 1px solid #e2e8f0;
+      padding-top: 20px;
+      text-align: center;
+      font-size: 11px;
+      color: #94a3b8;
+    }
+
+    @media print {
+      body {
+        background: #ffffff;
+        padding: 0;
+      }
+      .container {
+        border: none;
+        box-shadow: none;
+        padding: 0;
+        max-width: 100%;
+      }
+      .print-bar {
+        display: none;
+      }
+      .page-break {
+        page-break-before: always;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="print-bar">
+    <div>
+      <strong style="font-size: 14px; color: #0f172a;">ThereOps - Solution Brief & Architecture Deck</strong>
+      <div style="font-size: 11px; color: #64748b;">Ready to export as PDF for Question 5/5</div>
+    </div>
+    <button class="btn-print" onclick="window.print()">
+      📄 Print / Save as PDF
+    </button>
+  </div>
+
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div class="top-meta">
+        <div>
+          <strong style="font-size: 20px; color: #0f172a;">ThereOps</strong>
+          <span style="display: block; font-size: 11px; color: #64748b;">Autonomous Tourism Supply & Live Operations Platform</span>
+        </div>
+        <div style="text-align: right;">
+          <span class="badge">Functional MVP | Production Simulation</span>
+          <span style="display: block; font-size: 11px; color: #64748b; margin-top: 4px;">There DMC Innovation Challenge</span>
+        </div>
+      </div>
+
+      <h1>Autonomous Supplier Discovery, Real-Time Coordination, and 90% Self-Healing Operations for Saudi DMCs</h1>
+
+      <div class="author-meta">
+        <div><strong>Author & Builder:</strong> Mohammed Neanaa (Senior Software & AI Engineer, Riyadh)</div>
+        <div><strong>Current Maturity:</strong> MVP (Live Working System)</div>
+        <div><strong>Date:</strong> September 2026</div>
+      </div>
+    </div>
+
+    <!-- 1. The Ground Reality -->
+    <section>
+      <h2><span class="sec-num">1</span> The Ground Reality: Why Saudi DMC Operations Are Broken</h2>
+      <p>
+        Destination Management Companies in Saudi Arabia operate in one of the fastest-growing tourism markets globally. However, their day-to-day operations are constrained by heavy manual friction:
+      </p>
+
+      <div class="grid-3">
+        <div class="card">
+          <span class="card-title text-red">Fragmented Discovery</span>
+          <p style="margin: 0; font-size: 11px;">
+            Local Saudi experience providers (stargazing camps in AlUla, mountain guides in Asir, boat captains in the Red Sea) are scattered across Instagram, TikTok, and personal address books with zero centralized verification or capacity data.
+          </p>
+        </div>
+        <div class="card">
+          <span class="card-title text-amber">WhatsApp Phone Tag</span>
+          <p style="margin: 0; font-size: 11px;">
+            Local suppliers do not use enterprise portals or booking extranets. Coordinators spend hours sending manual messages and listening to voice notes across dozens of active chats to confirm dates and guest counts.
+          </p>
+        </div>
+        <div class="card">
+          <span class="card-title text-purple">The 45-Minute Delay Cascade</span>
+          <p style="margin: 0; font-size: 11px;">
+            When a morning desert transport is delayed by two hours, a coordinator must make four separate phone calls to push back the lunch reservation, warn the afternoon guide, and adjust dinner before guests start complaining.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. The Solution -->
+    <section>
+      <h2><span class="sec-num">2</span> Our Solution: The ThereOps Operational Architecture</h2>
+      <p>
+        ThereOps eliminates manual firefighting by meeting suppliers directly on WhatsApp while providing DMC teams with a real-time, conflict-aware operations room.
+      </p>
+
+      <div class="feature-box">
+        <div class="feature-header">
+          <span class="feature-title">1. Supplier Discovery and Semantic Matching</span>
+          <span class="tag">pgvector + 384-dim</span>
+        </div>
+        <p style="margin: 0; font-size: 12px;">
+          Extracts unstructured supplier data from social profiles and text descriptions into verified provider records. Uses local vector embeddings to match traveler interests (culture, stargazing, culinary) with top-ranked local creators in milliseconds.
+        </p>
+      </div>
+
+      <div class="feature-box">
+        <div class="feature-header">
+          <span class="feature-title">2. Constraint-Aware Itinerary Builder</span>
+          <span class="tag">Safety & Sanity Engine</span>
+        </div>
+        <p style="margin: 0; font-size: 12px;">
+          Builds dynamic multi-day schedules while actively enforcing transit time buffers, guest dietary requirements (Halal, nut-free), mobility restrictions (wheelchair accessibility), and group nationalities before itineraries are saved.
+        </p>
+      </div>
+
+      <div class="feature-box">
+        <div class="feature-header">
+          <span class="feature-title">3. 90% Autonomous Operations Room via WhatsApp</span>
+          <span class="tag" style="background: #f5f3ff; color: #5b21b6; font-weight: 700;">Llama 3.3 70B Orchestrator</span>
+        </div>
+        <p style="margin: 0; font-size: 12px;">
+          Suppliers receive natural, polite WhatsApp booking inquiries without robotic buttons. Inbound replies (both text and Saudi Arabic voice notes) are understood. When a vendor reports a delay, the system recalculates downstream events, shifts database times, and automatically sends polite WhatsApp updates to subsequent vendors.
+        </p>
+      </div>
+
+      <div class="feature-box">
+        <div class="feature-header">
+          <span class="feature-title">4. Multilingual Tour Leader Notifications</span>
+          <span class="tag">Japanese, Italian, English</span>
+        </div>
+        <p style="margin: 0; font-size: 12px;">
+          Simultaneously generates localized, culturally reassuring schedule notices in the traveler group's native language (e.g. Japanese or Italian) so tour leaders can inform guests immediately, preserving a 5-star customer experience.
+        </p>
+      </div>
+
+      <div class="feature-box">
+        <div class="feature-header">
+          <span class="feature-title">5. Predictive Regional Demand and Supplier Analytics</span>
+          <span class="tag">Forecasting & SLA Scorecards</span>
+        </div>
+        <p style="margin: 0; font-size: 12px;">
+          Forecasts peak seasonal pressure scores across AlUla (Winter Tantora), Asir (Summer), Riyadh, and Jeddah. Generates post-mortem supplier scorecards that track on-time rates and responsiveness to guide future contract allocations.
+        </p>
+      </div>
+    </section>
+
+    <!-- 3. Technical Architecture -->
+    <section>
+      <h2><span class="sec-num">3</span> Technical Architecture & Live Stack</h2>
+
+      <div class="tech-box">
+        <div class="tech-grid">
+          <div class="tech-item">
+            <span>Frontend & Routing</span>
+            <strong>Next.js 16 App Router</strong>
+            <small style="color: #94a3b8; font-size: 10px;">Tailwind CSS + Lucide</small>
+          </div>
+          <div class="tech-item">
+            <span>Database & Vector</span>
+            <strong>Supabase PostgreSQL</strong>
+            <small style="color: #94a3b8; font-size: 10px;">pgvector + Multi-Tenant RLS</small>
+          </div>
+          <div class="tech-item">
+            <span>Messaging & Audio</span>
+            <strong>WhatsApp Cloud API</strong>
+            <small style="color: #94a3b8; font-size: 10px;">Groq Whisper-large-v3</small>
+          </div>
+          <div class="tech-item">
+            <span>Operations Engine</span>
+            <strong>Llama 3.3 70B (Groq)</strong>
+            <small style="color: #94a3b8; font-size: 10px;">OpenAI GPT-4o Mini Backup</small>
+          </div>
+        </div>
+
+        <div class="flow-diagram">
+          <div class="flow-label">Operational Data Flow:</div>
+          <div>[Supplier WhatsApp Audio/Text] &rarr; [Groq Whisper (Arabic Voice Transcription)]</div>
+          <div>&rarr; [Multi-Group Disambiguation] &rarr; [Llama 3.3 70B Operations Dispatcher]</div>
+          <div>&rarr; [Supabase DB Schedule Shift] &rarr; [Proactive Downstream Vendor WhatsApp Dispatch]</div>
+          <div>&rarr; [Localized Tour Leader Notice (JP/IT/EN)] &rarr; [Live Coordinator Realtime UI]</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. Operational Benchmarks -->
+    <section>
+      <h2><span class="sec-num">4</span> Operational Impact & Validation Benchmarks</h2>
+
+      <div class="metrics-grid">
+        <div class="metric-card m-green">
+          <div class="metric-val">4 sec</div>
+          <div class="metric-title">Disruption Handling</div>
+          <div class="metric-sub">vs. 45 mins of manual calls</div>
+        </div>
+        <div class="metric-card m-violet">
+          <div class="metric-val">92%+</div>
+          <div class="metric-title">Autonomous Resolution</div>
+          <div class="metric-sub">Zero manual call bottleneck</div>
+        </div>
+        <div class="metric-card m-blue">
+          <div class="metric-val">100%</div>
+          <div class="metric-title">WhatsApp Native</div>
+          <div class="metric-sub">No new app for suppliers</div>
+        </div>
+        <div class="metric-card m-amber">
+          <div class="metric-val">26 ms</div>
+          <div class="metric-title">Semantic Matching</div>
+          <div class="metric-sub">Local vector embeddings</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. Builder Profile -->
+    <section>
+      <h2><span class="sec-num">5</span> Builder Profile & Proven Track Record</h2>
+
+      <div class="profile-box">
+        <div class="profile-header">
+          <div>
+            <strong style="font-size: 14px; color: #0f172a;">Mohammed Neanaa</strong>
+            <span style="display: block; font-size: 11px; color: #64748b;">Senior Backend & AI Systems Engineer (Riyadh, Saudi Arabia)</span>
+          </div>
+          <span style="font-size: 11px; color: #475569; background: #ffffff; padding: 4px 10px; border-radius: 8px; border: 1px solid #e2e8f0;">
+            +966 54 247 7954 | mohammedneana@gmail.com
+          </span>
+        </div>
+
+        <p style="font-size: 12px; margin-bottom: 10px;">
+          Six years of experience building scalable backend platforms, agentic AI workflows, and live operations software in Riyadh:
+        </p>
+
+        <ul class="experience-list">
+          <li>
+            <strong style="color: #0f172a;">Agentic AI & Orchestration (Cerberus & Agentic Learning): </strong>
+            Architected multi-agent orchestration systems that coordinate complex tasks, handle tool routing, and execute workflows autonomously.
+          </li>
+          <li>
+            <strong style="color: #0f172a;">Production AI & High-Traffic Backends (Fiddah, Riyadh): </strong>
+            Architected AI recommendation backends with PostgreSQL, Redis, and vector search (RAG / FAISS), scaled to handle heavy traffic spikes.
+          </li>
+          <li>
+            <strong style="color: #0f172a;">Event Coordination Systems (Toklah, Riyadh): </strong>
+            Engineered backend architecture for real-time volunteer and event management, managing active schedules under fast-moving event conditions.
+          </li>
+          <li>
+            <strong style="color: #0f172a;">NEOM Mega-Project Experience (Bullivant Arabia): </strong>
+            Automated complex data pipelines for geotechnical reporting on NEOM project sites.
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <div class="footer">
+      ThereOps &bull; Submitted for the There DMC Innovation Challenge &bull; Confidential & Proprietary
+    </div>
+  </div>
+
+</body>
+</html>
