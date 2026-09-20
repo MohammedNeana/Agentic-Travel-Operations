@@ -35,14 +35,16 @@ export async function POST(request: NextRequest) {
     } catch {}
 
     const interests = Array.isArray(body.interests) ? body.interests : ['تراث وثقافة', 'سفاري صحراوي'];
+    const destinations = Array.isArray(body.destinations) ? body.destinations : ['العُلا', 'الرياض'];
     const supabase = createServerSupabaseClient();
     let tenantId = body.tenant_id?.trim();
     if (!tenantId) {
-      const { data: org } = await supabase
+      const { data } = await supabase
         .from('organizations')
         .select('tenant_id')
         .limit(1)
         .maybeSingle();
+      const org = data as { tenant_id?: string } | null;
       tenantId = org?.tenant_id;
     }
     if (!tenantId) {
@@ -142,11 +144,12 @@ export async function GET(request: NextRequest) {
     const supabase = createServerSupabaseClient();
     let tenantId = searchParams.get('tenant_id')?.trim();
     if (!tenantId) {
-      const { data: org } = await supabase
+      const { data } = await supabase
         .from('organizations')
         .select('tenant_id')
         .limit(1)
         .maybeSingle();
+      const org = data as { tenant_id?: string } | null;
       tenantId = org?.tenant_id;
     }
     if (!tenantId) {

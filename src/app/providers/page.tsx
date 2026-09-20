@@ -102,11 +102,12 @@ export default function ProvidersPage() {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       let activeTenant = session?.user?.user_metadata?.tenant_id;
       if (!activeTenant) {
-        const { data: org } = await supabase
+        const { data } = await supabase
           .from('organizations')
           .select('tenant_id')
           .limit(1)
           .maybeSingle();
+        const org = data as { tenant_id?: string } | null;
         activeTenant = org?.tenant_id;
       }
       if (activeTenant) {
@@ -227,8 +228,8 @@ export default function ProvidersPage() {
     try {
       setActionLoadingId(id);
       const supabase = createBrowserSupabaseClient();
-      const { error } = await supabase
-        .from('experience_providers')
+      const { error } = await (supabase
+        .from('experience_providers') as any)
         .update({ verification_status: 'verified' })
         .eq('id', id);
 
