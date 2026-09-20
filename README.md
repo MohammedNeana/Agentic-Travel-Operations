@@ -8,21 +8,21 @@
 [![Tailwind CSS 4](https://img.shields.io/badge/Tailwind_CSS-v4-38B2AC?logo=tailwind-css&style=flat-square)](https://tailwindcss.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
-An enterprise-grade B2B SaaS platform engineered specifically for **Destination Management Companies (DMCs)**.
+An enterprise-grade B2B SaaS platform engineered specifically for **Destination Management Companies (DMCs)** managing complex, multi-day itineraries and local experiential supply.
 
 **Agentic Travel Operations** bridges the gap between fragmented local experience creators scattered across social media and the high-stakes operational realities of running live multi-day tourist itineraries. It eliminates manual firefighting by combining **unstructured supplier extraction**, **hybrid semantic vector search**, **natural conversational WhatsApp dispatching**, and a **90% autonomous self-healing operations room** that absorbs delays and prevents schedule collapse before travelers are affected.
 
 ---
 
-## The Operational Reality: Why Saudi DMC Operations Fail
+## The Operational Reality: Why Traditional DMC Operations Fail
 
-Saudi Arabia is experiencing a historic surge in luxury, cultural, and adventure tourism. However, the operational backbone of most Saudi DMCs remains trapped in manual, error-prone workflows:
+Destination Management Companies (DMCs) manage high-value, bespoke travel itineraries in rapidly expanding cultural and luxury travel markets. However, the operational backbone of most DMCs remains trapped in manual, error-prone workflows:
 
-1. **Fragmented Supplier Discovery:** Authentic local experience providers (stargazing astronomers in AlUla, mountain trekking guides in Asir, boat captains in the Red Sea) do not exist on traditional Global Distribution Systems (GDS) or corporate booking extranets. They live on Instagram, TikTok, and personal address books, making supplier discovery, verification, and capacity tracking entirely manual.
-2. **The "WhatsApp Phone-Tag" Bottleneck:** Local Saudi suppliers refuse to log into complex supplier portals or extranets. Coordinators spend hours sending manual WhatsApp texts and exchanging voice notes to negotiate availability, confirm guest counts, and relay special requests.
-3. **The 45-Minute Delay Cascade:** Saudi itineraries involve substantial transit times between desert resorts, heritage sites, and dining venues. When a morning 4x4 desert safari runs 90 minutes late, a human coordinator must scramble to make 4 to 6 frantic phone calls: push back lunch, alert the afternoon cultural guide, reschedule sunset viewing on Harrat Uwayrid, and shift the private stargazing dinner. By the time the coordinator finishes making calls, guests are already waiting, vendors are frustrated, and itineraries collapse.
+1. **Fragmented Supplier Discovery:** Authentic local experience creators (stargazing astronomers, mountain guides, coastal captains, boutique culinary artisans) do not exist on traditional Global Distribution Systems (GDS) or corporate booking extranets. They operate primarily on Instagram, TikTok, and direct messaging, making supplier sourcing, verification, and capacity tracking highly fragmented.
+2. **The "WhatsApp Phone-Tag" Bottleneck:** Independent local suppliers rarely adopt complex supplier portals or extranets. Operations coordinators spend hours sending manual chat messages and exchanging voice notes to negotiate availability, confirm guest counts, and relay special requests.
+3. **The 45-Minute Delay Cascade:** Premium experiential itineraries involve substantial transit times between boutique lodges, remote heritage sites, and dining venues. When a morning excursion runs 90 minutes late, a coordinator must scramble to make multiple frantic phone calls: push back lunch, alert the afternoon guide, reschedule sunset viewpoints, and shift dinner reservations. By the time the coordinator finishes making calls, travelers are already waiting, suppliers are frustrated, and schedules collapse.
 
-**Agentic Travel Operations** was architected to replace this chaotic phone-tag cycle with **an autonomous, WhatsApp-native operations engine**.
+**Agentic Travel Operations** was architected to replace this chaotic firefighting cycle with **an autonomous, WhatsApp-native operations engine**.
 
 ---
 
@@ -43,8 +43,8 @@ flowchart TD
     end
 
     subgraph LiveOps ["3. WhatsApp-Native Operations & Self-Healing Room"]
-        VendorMsg["Supplier WhatsApp (Text or Arabic Voice Note)"] --> WAHook["Meta WhatsApp Cloud API Webhook"]
-        WAHook --> Whisper["Groq Whisper-large-v3 (Saudi Dialect Transcription)"]
+        VendorMsg["Supplier WhatsApp (Text or Audio Voice Note)"] --> WAHook["Meta WhatsApp Cloud API Webhook"]
+        WAHook --> Whisper["Groq Whisper-large-v3 (Multilingual Voice Transcription)"]
         Whisper --> Disambig["Multi-Group Disambiguation (Resolves Conflicting Tours)"]
         Disambig --> Orchestrator["AI Operations Dispatcher (Llama 3.3 70B)"]
         
@@ -62,19 +62,19 @@ flowchart TD
 ## Core System Capabilities
 
 ### 1. Unstructured Supplier Discovery & Hybrid Vector Search
-- **Instant Entity Extraction:** Ingests unstructured supplier bios, brochures, WhatsApp messages, or scraped web pages, extracting commercial names, verified guest capacities, Saudi operating cities, experience types, and phone numbers.
+- **Instant Entity Extraction:** Ingests unstructured supplier bios, brochures, WhatsApp messages, or scraped web pages, extracting commercial names, verified guest capacities, operating destinations, experience types, and phone numbers.
 - **Zero-Latency Local Embeddings:** Utilizes an in-process `@xenova/transformers` ONNX pipeline (`Xenova/all-MiniLM-L6-v2`) generating 384-dimensional dense vectors in **26ms** locally without paid external embedding APIs.
-- **Supabase `pgvector` Hybrid Search:** Combines dense cosine semantic vectors with full-text SQL matching to rank local suppliers based on traveler interests (e.g., matching "authentic culinary storytelling" to Hijazi home-cooking hosts in Al Balad, Jeddah).
+- **Supabase `pgvector` Hybrid Search:** Combines dense cosine semantic vectors with full-text SQL matching to rank local suppliers based on traveler interests (e.g., matching "authentic culinary storytelling" or "night desert astronomy" to top-ranked local hosts).
 
 ### 2. Constraint-Aware Smart Itinerary Builder
-- **Sanity & Constraint Validation:** Real-time checking of transit buffers, opening hours, and logical geographic sequencing across Saudi regions.
-- **Dietary & Accessibility Safeguards:** Explicitly checks and enforces traveler restrictions, including Halal certifications, severe nut allergies, and wheelchair or mobility requirements.
+- **Sanity & Constraint Validation:** Real-time checking of transit buffers, opening hours, and logical geographic sequencing across travel destinations.
+- **Dietary & Accessibility Safeguards:** Explicitly checks and enforces traveler restrictions, including dietary preferences, food allergies, and wheelchair or mobility requirements.
 - **Interactive Drag-and-Drop:** Intuitive timeline re-ordering with minute-level start/end time editing and auto-cascading schedule adjustments.
 
-### 3. WhatsApp-Native Conversational Booking & Arabic Voice Intelligence
-- **No Robotic Menus:** Dispatches natural, polite, and culturally appropriate Saudi Arabic WhatsApp booking inquiries to suppliers.
-- **Saudi Dialect Voice Comprehension:** Routes incoming WhatsApp audio notes through Groq's high-speed `whisper-large-v3` pipeline, accurately transcribing Saudi colloquial dialects.
-- **Multi-Group Disambiguation:** When a supplier manages multiple groups on the same date (e.g., a morning group currently running vs. an upcoming afternoon VIP delegation), the system analyzes temporal clues (`الحين`, `بعد شوي`, group sizes, nationalities) or opens a conversational clarification loop rather than making blind assumptions.
+### 3. WhatsApp-Native Conversational Booking & Voice Intelligence
+- **No Robotic Menus:** Dispatches natural, polite, and culturally attuned conversational WhatsApp booking inquiries to suppliers.
+- **Voice Note Comprehension:** Routes incoming WhatsApp audio notes through Groq's high-speed `whisper-large-v3` pipeline, accurately transcribing colloquial voice notes in milliseconds.
+- **Multi-Group Disambiguation:** When a supplier manages multiple groups on the same date (e.g., a morning group currently running vs. an upcoming afternoon VIP delegation), the system analyzes temporal clues, group sizes, and nationalities or opens a conversational clarification loop rather than making blind assumptions.
 
 ### 4. 90% Autonomous Operations Room (Self-Healing Cascades)
 - **Automatic Disruption Handling:** When a vendor reports a delay or breakdown, the AI Operations Orchestrator:
@@ -85,14 +85,14 @@ flowchart TD
 - **Multilingual Tour Leader Notifications:** Generates real-time, culturally reassuring updates translated into the traveler group's native language (**Japanese 🇯🇵**, **Italian 🇮🇹**, **English 🇬🇧**, **French 🇫🇷**, **German 🇩🇪**) so tour leaders can proactively brief guests before frustration occurs.
 
 ### 5. Predictive Regional Demand Forecasting (`/forecasting`)
-- **Macro Seasonal Intelligence:** Real-time forecasting of visitor surges, capacity pressure scores (1–100), and pricing spikes across Saudi tourism hubs (**AlUla Winter Tantora**, **Asir Cool Summer**, **Riyadh Season**, **Red Sea & NEOM Eco-adventures**).
-- **Supply Bottleneck Warnings:** Proactively flags critical shortages (luxury 4x4 fleets, licensed bilingual cultural guides, luxury desert camp allocations) with specific advance procurement actions.
-- **Custom AI Scenario Simulation:** Allows planners to input custom simulation prompts (e.g. *"A delegation of 40 Japanese VIPs arriving during Winter Tantora requesting private stargazing"*) and receive instant operational risk evaluations.
+- **Macro Seasonal Intelligence:** Real-time forecasting of visitor surges, capacity pressure scores (1–100), and pricing spikes across regional tourism hubs, high seasons, and festival peaks.
+- **Supply Bottleneck Warnings:** Proactively flags critical shortages (specialized 4x4 fleets, licensed multilingual cultural guides, boutique accommodations) with specific advance procurement actions.
+- **Custom AI Scenario Simulation:** Allows planners to input custom simulation prompts (e.g. *"A delegation of 40 VIP travelers arriving during peak season requesting private stargazing"*) and receive instant operational risk evaluations.
 
 ### 6. Post-Trip Incident Post-Mortems & Supplier Analytics (`/analytics`)
 - **Live Database Auditing:** Directly inspects live Supabase event histories, calculating real-world disruption rates and autonomous self-healing metrics.
 - **Supplier Reliability Scorecards:** Rates suppliers into standardized tiers (**Tier 1 Excellent**, **Tier 2 Reliable**, **Watchlist**, **Needs Improvement**) with qualitative evaluations of WhatsApp responsiveness and punctuality.
-- **Recurring Issue Root Cause Analysis:** Categorizes systemic operational friction points (desert transit bottlenecks, language mismatches, altitude weather shifts in Soudah) and defines actionable SLA clauses for DMC procurement.
+- **Recurring Issue Root Cause Analysis:** Categorizes systemic operational friction points (transit bottlenecks, guide language mismatches, sudden weather contingencies) and defines actionable SLA clauses for DMC procurement.
 
 ---
 
@@ -117,7 +117,7 @@ flowchart TD
 ├── Database:         PostgreSQL 17 via Supabase with pgvector extension
 ├── Security:         Strict Multi-Tenant Row Level Security (RLS) on all tables
 ├── AI Engine:        Groq API (Llama 3.3 70B Versatile + Llama 3.1 8B Instant)
-├── Audio Inference:  Groq Whisper-large-v3 (Ultra-low latency Arabic voice transcription)
+├── Audio Inference:  Groq Whisper-large-v3 (Ultra-low latency audio & voice transcription)
 ├── Vector Embeddings: In-Process ONNX WebAssembly via @xenova/transformers (all-MiniLM-L6-v2)
 ├── Messaging:        Meta WhatsApp Cloud API (Graph API v21.0, Webhook Verification)
 ├── Styling:          Tailwind CSS v4 + Lucide React Icons
@@ -239,7 +239,6 @@ Open [http://localhost:3000](http://localhost:3000) to access the platform.
 
 **Mohammed Neanaa**  
 *Senior Software & Agentic AI Systems Engineer*  
-Riyadh, Saudi Arabia  
 - **Email:** [mohammedneana@gmail.com](mailto:mohammedneana@gmail.com)  
 - **LinkedIn:** [linkedin.com/in/mohammedneanaa](https://www.linkedin.com/in/mohammed-hamdi-b80442145/)  
 - **GitHub:** [github.com/mohammedneana](https://github.com/MohammedNeana)  
