@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
-import { Compass, Sparkles, LogOut, Building2, User as UserIcon } from 'lucide-react';
+import { Compass, Sparkles, LogOut, Building2, User as UserIcon, TrendingUp, BarChart3 } from 'lucide-react';
 import { createBrowserSupabaseClient } from '@/lib/supabase/client';
 import type { User } from '@supabase/supabase-js';
 
@@ -65,9 +65,21 @@ export function AppNavbar() {
     },
     {
       href: '/providers',
-      label: 'محرك استكشاف المزودين',
+      label: 'استكشاف المزودين',
       icon: Sparkles,
       isActive: pathname.startsWith('/providers'),
+    },
+    {
+      href: '/forecasting',
+      label: 'التنبؤ بالطلب',
+      icon: TrendingUp,
+      isActive: pathname.startsWith('/forecasting'),
+    },
+    {
+      href: '/analytics',
+      label: 'تحليلات الموثوقية',
+      icon: BarChart3,
+      isActive: pathname.startsWith('/analytics'),
     },
   ];
 

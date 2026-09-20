@@ -189,6 +189,14 @@ export interface DownstreamVendorNotice {
   whatsappMessage: string;
 }
 
+export interface TravelerLocalizedNotification {
+  language: string;
+  flag: string;
+  title: string;
+  message: string;
+  translatedSummaryInArabic: string;
+}
+
 export interface OrchestrationDecision {
   delayMinutes: number;
   incidentType: 'delay' | 'emergency' | 'reschedule' | 'cancellation' | 'general';
@@ -196,6 +204,7 @@ export interface OrchestrationDecision {
   incidentSummary: string;
   scheduleAdjustments: ScheduleAdjustment[];
   downstreamNotices: DownstreamVendorNotice[];
+  travelerNotification?: TravelerLocalizedNotification;
 }
 
 export interface OrchestrationExecutionResult {
@@ -204,6 +213,7 @@ export interface OrchestrationExecutionResult {
   updatedEventsCount: number;
   dispatchedNoticesCount: number;
   incidentSummary?: string;
+  travelerNotification?: TravelerLocalizedNotification;
   error?: string;
 }
 

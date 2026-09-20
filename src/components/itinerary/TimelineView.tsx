@@ -14,6 +14,9 @@ import {
   Check,
   X,
   Calendar,
+  Globe,
+  Sparkles,
+  Bot,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -357,15 +360,44 @@ function EventCard({
         </div>
       )}
 
-      {event.status === 'escalated' && event.escalationReason && (
-        <div className="mt-3 flex items-start gap-2 rounded-lg bg-red-50 p-2.5 border border-red-200/80">
-          <AlertTriangle className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
-          <div className="text-xs">
-            <span className="font-bold text-red-900">بلاغ التأخير/الطارئ: </span>
-            <span className="font-medium text-red-800 italic">"{event.escalationReason}"</span>
+      {event.status === 'escalated' && event.escalationReason && (() => {
+        const parts = event.escalationReason.split('🌐');
+        const opsReason = parts[0].trim();
+        const travelerNotice = parts[1]?.trim();
+
+        return (
+          <div className="mt-3 space-y-2">
+            <div className="flex items-start gap-2 rounded-lg bg-red-50 p-2.5 border border-red-200/80">
+              <AlertTriangle className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
+              <div className="text-xs flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-bold text-red-900">بلاغ التأخير وإعادة الجدولة:</span>
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-violet-100 text-violet-800 px-2 py-0.5 rounded-full border border-violet-200">
+                    <Bot className="h-3 w-3" />
+                    تم التدخل آلياً (AI Orchestrator)
+                  </span>
+                </div>
+                <p className="font-medium text-red-800 italic mt-0.5">"{opsReason}"</p>
+              </div>
+            </div>
+
+            {travelerNotice && (
+              <div className="flex items-start gap-2 rounded-lg bg-violet-50/70 p-2.5 border border-violet-200/80">
+                <Globe className="h-4 w-4 text-violet-600 shrink-0 mt-0.5" />
+                <div className="text-xs flex-1">
+                  <div className="flex items-center gap-1.5 text-violet-900 font-bold mb-1">
+                    <Sparkles className="h-3 w-3 text-violet-600" />
+                    <span>إشعار الفوج السياحي باللغة الأصلية (Tour Leader Notice):</span>
+                  </div>
+                  <p className="text-violet-950 font-sans leading-relaxed bg-white/80 p-2 rounded border border-violet-100 text-[11px] font-medium">
+                    {travelerNotice}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

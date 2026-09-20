@@ -96,10 +96,9 @@ Rules:
 - "verification_status": Always "pending" for newly extracted providers.
 - "phone_number": If ANY contact phone number, mobile number, or WhatsApp number appears anywhere in the text (especially under the discovered contact numbers section or article), you MUST extract it and format it with country code (e.g. +9665XXXXXXXX). ONLY return null if absolutely no phone or WhatsApp number is mentioned.`;
 
-  // Candidate models: openai/gpt-oss-120b and qwen/qwen3.6-27b
+  // Real, supported Groq models
   const candidateModels = [
-    'openai/gpt-oss-120b',
-    'qwen/qwen3.6-27b',
+    'llama-3.3-70b-versatile',
     'llama-3.1-8b-instant',
   ];
 

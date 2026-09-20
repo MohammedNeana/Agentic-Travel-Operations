@@ -64,7 +64,7 @@ export async function classifyVoiceIntent(
   }
 
   let apiKey = process.env.GROQ_API_KEY;
-  let model = process.env.GROQ_LLM_MODEL || 'openai/gpt-oss-120b';
+  let model = process.env.GROQ_LLM_MODEL || 'llama-3.3-70b-versatile';
   let candidateEvents: CandidateGroupEvent[] | undefined;
 
   if (typeof optionsOrApiKey === 'string') {
@@ -141,7 +141,7 @@ Respond ONLY with valid JSON in this exact structure:
 
   const candidateModels = process.env.GROQ_LLM_MODEL
     ? [process.env.GROQ_LLM_MODEL]
-    : [model, 'openai/gpt-oss-20b', 'qwen/qwen3.6-27b'];
+    : [model, 'llama-3.1-8b-instant'];
 
   let lastError: Error | null = null;
 

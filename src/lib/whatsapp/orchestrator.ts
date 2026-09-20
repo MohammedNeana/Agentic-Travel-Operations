@@ -1,11 +1,12 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { sendWhatsAppTextMessage } from './sender';
-import type {
+import {
   OrchestrationDecision,
   OrchestrationExecutionResult,
   ScheduleAdjustment,
   DownstreamVendorNotice,
 } from './types';
+import { callLLMJson } from '@/lib/ai/llm-client';
 
 interface GroqChatCompletionResponse {
   choices?: Array<{
@@ -120,7 +121,7 @@ export async function orchestrateItineraryCascade(options: {
 
   // 6. Consult Groq LLM as the Autonomous Operations Director
   const apiKey = process.env.GROQ_API_KEY;
-  const model = process.env.GROQ_LLM_MODEL || 'openai/gpt-oss-120b';
+  const model = process.env.GROQ_LLM_MODEL || 'llama-3.3-70b-versatile';
 
   let decision: OrchestrationDecision;
 
@@ -169,13 +170,18 @@ export async function orchestrateItineraryCascade(options: {
     const startStr = adj.newStartTime.length === 5 ? `${adj.newStartTime}:00` : adj.newStartTime;
     const endStr = adj.newEndTime.length === 5 ? `${adj.newEndTime}:00` : adj.newEndTime;
 
+    const baseReason = adj.reason || decision.incidentSummary;
+    const fullReason = decision.travelerNotification
+      ? `${baseReason} 🌐 [${decision.travelerNotification.flag} ${decision.travelerNotification.language}]: "${decision.travelerNotification.message}"`
+      : baseReason;
+
     const { error: updateErr } = await supabase
       .from('itinerary_events')
       .update({
         start_time: startStr,
         end_time: endStr,
         status: adj.newStatus || 'escalated',
-        escalation_reason: adj.reason || decision.incidentSummary,
+        escalation_reason: fullReason,
         updated_at: new Date().toISOString(),
       })
       .eq('id', adj.eventId);
@@ -218,6 +224,7 @@ export async function orchestrateItineraryCascade(options: {
     updatedEventsCount,
     dispatchedNoticesCount,
     incidentSummary: decision.incidentSummary,
+    travelerNotification: decision.travelerNotification,
   };
 }
 
@@ -293,6 +300,18 @@ YOUR AUTONOMOUS MISSION:
 4. WRITE SYSTEM INCIDENT SUMMARY ("incidentSummary"):
    - A clear, authoritative Arabic operational log note summarizing the root cause, delay amount, schedule changes made, and downstream vendors alerted.
 
+5. MULTILINGUAL TRAVELER / TOUR LEADER NOTIFICATION ("travelerNotification"):
+   - When a delay or reschedule cascade occurs, the delegation tour leader / traveler must be notified in their NATIVE LANGUAGE based on delegation nationality: "${travelerNationality}".
+   - Detect appropriate language and flag:
+     * If Japanese / ياباني -> Japanese 🇯🇵 (日本語)
+     * If Italian / إيطالي -> Italian 🇮🇹 (Italiano)
+     * If French / فرنسي -> French 🇫🇷 (Français)
+     * If German / ألماني -> German 🇩🇪 (Deutsch)
+     * If Saudi / Arabic / عربي -> Arabic 🇸🇦
+     * Otherwise -> English 🇬🇧
+   - Draft a reassuring, professional update message in that language explaining the slight schedule adjustment, estimated new time, and ensuring them that their comfort and experience quality remain the top priority.
+   - Include "translatedSummaryInArabic" so the DMC operations team can immediately understand the message.
+
 Respond ONLY with valid JSON in this exact structure:
 {
   "delayMinutes": 120,
@@ -319,7 +338,14 @@ Respond ONLY with valid JSON in this exact structure:
       "newStartTime": "19:30",
       "whatsappMessage": "نص رسالة الواتساب البشرية الدافئة للمزود التالي..."
     }
-  ]
+  ],
+  "travelerNotification": {
+    "language": "Japanese (日本語)",
+    "flag": "🇯🇵",
+    "title": "Tour Schedule Update",
+    "message": "Localized message in traveler native language...",
+    "translatedSummaryInArabic": "الملخص بالعربية لمنسق الرحلة..."
+  }
 }`;
 
   const userPrompt = `رسالة المزود الواردة (النصية أو الصوتية):
@@ -329,37 +355,13 @@ Respond ONLY with valid JSON in this exact structure:
 جدول الرحلة الكامل لهذا اليوم:
 ${scheduleDescription}`;
 
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.1,
-    }),
+  const result = await callLLMJson<OrchestrationDecision>({
+    systemPrompt,
+    userPrompt,
+    temperature: 0.1,
   });
 
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Groq LLM orchestrator failed [HTTP ${response.status}]: ${errText}`);
-  }
-
-  const data = (await response.json()) as GroqChatCompletionResponse;
-  const content = data.choices?.[0]?.message?.content;
-
-  if (!content) {
-    throw new Error('Groq LLM returned empty content for orchestration.');
-  }
-
-  const cleaned = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-  const parsed = JSON.parse(cleaned) as OrchestrationDecision;
+  const parsed = result.data;
 
   return {
     delayMinutes: typeof parsed.delayMinutes === 'number' ? parsed.delayMinutes : 60,
@@ -368,6 +370,7 @@ ${scheduleDescription}`;
     incidentSummary: parsed.incidentSummary || 'تم ترحيل الجدول تلقائياً بالذكاء الاصطناعي لتفادي التضارب.',
     scheduleAdjustments: Array.isArray(parsed.scheduleAdjustments) ? parsed.scheduleAdjustments : [],
     downstreamNotices: Array.isArray(parsed.downstreamNotices) ? parsed.downstreamNotices : [],
+    travelerNotification: parsed.travelerNotification || undefined,
   };
 }
 
@@ -481,6 +484,33 @@ function fallbackOrchestrationDecision(params: {
 
   const incidentSummary = `رصد تأخير قدره ${delayMinutes} دقيقة في تجربة "${currentTarget.title}". قام النظام الذكي بترحيل المواعيد اللاحقة وإشعار ${downstreamNotices.length} مزودين تالين عبر الواتساب لتفادي أي تضارب.`;
 
+  const isJapanese = travelerNationality.includes('يابان') || travelerNationality.toLowerCase().includes('japan');
+  const isItalian = travelerNationality.includes('إيطال') || travelerNationality.toLowerCase().includes('ital');
+
+  const travelerNotification = isJapanese
+    ? {
+        language: 'Japanese (日本語)',
+        flag: '🇯🇵',
+        title: 'ツアースケジュール更新のお知らせ',
+        message: `お客様各位、前後の観光行程の都合により、本日のツアー開始時刻が ${newTargetStart} に変更となりました。ご不便をおかけしますが、最高の体験をお届けできるよう準備しております。何卒よろしくお願い申し上げます。`,
+        translatedSummaryInArabic: `إشعار باليابانية: تم إبلاغ الوفد بترحيل موعد الجولة إلى ${newTargetStart} مع التأكيد على سلامتهم وراحتهم.`,
+      }
+    : isItalian
+    ? {
+        language: 'Italian (Italiano)',
+        flag: '🇮🇹',
+        title: 'Aggiornamento Orario Itinerario',
+        message: `Gentili ospiti, a causa di un lieve ritardo nell'attività precedente, il nuovo orario di inizio è previsto per le ${newTargetStart}. Ci scusiamo per l'inconveniente e vi ringraziamo per la comprensione.`,
+        translatedSummaryInArabic: `إشعار بالإيطالية: تم إبلاغ الوفد بترحيل موعد الجولة إلى ${newTargetStart} مع الاعتذار والشكر لتفهمهم.`,
+      }
+    : {
+        language: 'English',
+        flag: '🇬🇧',
+        title: 'Schedule Update Notification',
+        message: `Dear Guests, due to a minor delay in the previous experience, your upcoming activity will now commence at ${newTargetStart}. We appreciate your patience and look forward to delivering a wonderful experience.`,
+        translatedSummaryInArabic: `إشعار بالإنجليزية: تم إبلاغ الوفد بترحيل الموعد إلى ${newTargetStart}.`,
+      };
+
   return {
     delayMinutes,
     incidentType: 'delay',
@@ -488,5 +518,6 @@ function fallbackOrchestrationDecision(params: {
     incidentSummary,
     scheduleAdjustments,
     downstreamNotices,
+    travelerNotification,
   };
 }
