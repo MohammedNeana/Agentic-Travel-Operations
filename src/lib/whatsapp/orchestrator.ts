@@ -8,6 +8,8 @@ import {
 } from './types';
 import { callLLMJson } from '@/lib/ai/llm-client';
 import { validateOrchestrationDecision } from '@/lib/agent/action-validator';
+import { recordAgentOperation } from '@/lib/agent/audit-log';
+import crypto from 'crypto';
 
 export async function orchestrateItineraryCascade(options: {
   eventId: string;
@@ -16,6 +18,7 @@ export async function orchestrateItineraryCascade(options: {
 }): Promise<OrchestrationExecutionResult> {
   const supabase = createServerSupabaseClient();
   const { eventId, vendorMessage } = options;
+  const startTs = Date.now();
 
   const { data: targetEvent, error: targetErr } = await supabase
     .from('itinerary_events')
@@ -148,6 +151,19 @@ export async function orchestrateItineraryCascade(options: {
       })
       .eq('id', targetEvent.id);
 
+    await recordAgentOperation({
+      operationId: crypto.randomUUID(),
+      operationType: 'action_boundary_block',
+      itineraryId: targetEvent.itinerary_id,
+      eventId: targetEvent.id,
+      senderPhone: options.senderPhone,
+      llmModel: model,
+      latencyMs: Date.now() - startTs,
+      rationale: vendorMessage,
+      validationStatus: 'rejected',
+      violations: validation.violations,
+    });
+
     return {
       success: false,
       updatedEventsCount: 0,
@@ -199,6 +215,24 @@ export async function orchestrateItineraryCascade(options: {
       }
     }
   }
+
+  await recordAgentOperation({
+    operationId: crypto.randomUUID(),
+    operationType: 'schedule_cascade',
+    itineraryId: targetEvent.itinerary_id,
+    eventId: targetEvent.id,
+    senderPhone: options.senderPhone,
+    llmModel: model,
+    latencyMs: Date.now() - startTs,
+    rationale: validatedDecision.incidentSummary,
+    validationStatus: 'passed',
+    metadata: {
+      delayMinutes: validatedDecision.delayMinutes,
+      updatedEventsCount,
+      dispatchedNoticesCount,
+      incidentType: validatedDecision.incidentType,
+    },
+  });
 
   return {
     success: true,

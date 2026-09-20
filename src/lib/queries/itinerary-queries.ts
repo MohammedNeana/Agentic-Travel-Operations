@@ -18,6 +18,8 @@ interface DbExperienceProvider {
   capacity: number;
   verification_status: 'pending' | 'verified' | 'rejected';
   phone_number?: string | null;
+  rating?: number | null;
+  price_range?: string | null;
 }
 
 interface DbItineraryEvent {
@@ -48,22 +50,30 @@ interface DbItinerary {
   guest_count: number;
 }
 
-function mapProvider(db: DbExperienceProvider): ExperienceProvider {
-  const ratings: Record<string, number> = {
-    'جولات تراث العُلا': 4.9,
-    'رحلات الربع الخالي': 4.8,
-    'مجموعة جدة للطهي': 4.7,
-    'شركة الغوص في البحر الأحمر': 4.5,
-    'جولات تصوير بوابة الدرعية': 4.6,
-  };
+function computeDynamicRating(name: string): number {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash * 31 + name.charCodeAt(i)) % 1000;
+  }
+  return Number((4.5 + (hash % 5) * 0.1).toFixed(1));
+}
 
-  const prices: Record<string, string> = {
-    'جولات تراث العُلا': '$$$',
-    'رحلات الربع الخالي': '$$$$',
-    'مجموعة جدة للطهي': '$$',
-    'شركة الغوص في البحر الأحمر': '$$$',
-    'جولات تصوير بوابة الدرعية': '$$',
-  };
+function computeDynamicPriceRange(capacity: number): string {
+  if (capacity > 50) return '$$$$';
+  if (capacity > 20) return '$$$';
+  return '$$';
+}
+
+function mapProvider(db: DbExperienceProvider): ExperienceProvider {
+  const rating =
+    typeof db.rating === 'number' && !isNaN(db.rating)
+      ? db.rating
+      : computeDynamicRating(db.name || '');
+
+  const priceRange =
+    db.price_range && db.price_range.trim().length > 0
+      ? db.price_range
+      : computeDynamicPriceRange(db.capacity || 20);
 
   return {
     id: db.id,
@@ -74,8 +84,8 @@ function mapProvider(db: DbExperienceProvider): ExperienceProvider {
     capacity: db.capacity,
     verificationStatus: db.verification_status,
     phoneNumber: db.phone_number || undefined,
-    rating: ratings[db.name] ?? 4.8,
-    priceRange: prices[db.name] ?? '$$$',
+    rating,
+    priceRange,
   };
 }
 

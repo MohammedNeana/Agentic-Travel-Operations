@@ -35,6 +35,14 @@ export interface AnalyticsDashboardResult {
     averageRecoveryMinutes: number;
     totalActiveSuppliers: number;
     overallSatisfactionRate: string;
+    provenance?: {
+      totalOperations: 'computed';
+      disruptionRate: 'computed';
+      totalActiveSuppliers: 'computed';
+      autonomousResolutionRate: 'simulated';
+      averageRecoveryMinutes: 'simulated';
+      overallSatisfactionRate: 'simulated';
+    };
   };
   recurringIssues: RecurringOperationalIssue[];
   supplierScorecards: SupplierScorecard[];
@@ -166,11 +174,31 @@ Respond ONLY with valid JSON in this exact structure:
       temperature: 0.2,
     });
 
+    const finalData: AnalyticsDashboardResult = {
+      ...result.data,
+      metrics: {
+        totalOperations: events.length,
+        disruptionRate: `${disruptionPercent}%`,
+        totalActiveSuppliers: providers.length,
+        autonomousResolutionRate: result.data?.metrics?.autonomousResolutionRate || '92.6%',
+        averageRecoveryMinutes: result.data?.metrics?.averageRecoveryMinutes || 4,
+        overallSatisfactionRate: result.data?.metrics?.overallSatisfactionRate || '96.7%',
+        provenance: {
+          totalOperations: 'computed',
+          disruptionRate: 'computed',
+          totalActiveSuppliers: 'computed',
+          autonomousResolutionRate: 'simulated',
+          averageRecoveryMinutes: 'simulated',
+          overallSatisfactionRate: 'simulated',
+        },
+      },
+    };
+
     return NextResponse.json({
       success: true,
       source: result.provider,
       model: result.model,
-      data: result.data,
+      data: finalData,
     });
   } catch (error) {
     return NextResponse.json(
