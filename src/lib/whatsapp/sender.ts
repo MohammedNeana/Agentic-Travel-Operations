@@ -13,12 +13,41 @@ export function cleanPhoneNumber(phone: string): string {
  * Formats the Arabic booking notification message body for an experience provider.
  */
 export function formatBookingNotificationText(details: ProviderNotificationDetails): string {
-  const title = details.title || 'تجربة سياحية';
-  const date = details.date || 'تاريخ محدد';
-  const time = details.time ? ` في تمام الساعة [${details.time}]` : '';
-  const group = details.groupSize ? ` | عدد الضيوف: ${details.groupSize}` : '';
+  const title = details.title || 'التجربة السياحية';
+  const date = details.date || 'الموعد المحدد';
+  const timeInfo = details.time
+    ? details.endTime
+      ? `من الساعة ${details.time} إلى ${details.endTime}`
+      : `الساعة ${details.time}`
+    : 'خلال اليوم';
 
-  return `لديك طلب حجز جديد لفعالية [${title}] بتاريخ [${date}]${time}${group}. يرجى التأكيد.`;
+  const nationalityText = details.groupNationality ? `وفد سياحي (${details.groupNationality})` : 'وفد سياحي';
+  const groupText = details.groupSize ? `عددهم ${details.groupSize} أشخاص` : '';
+  const groupDetails = [nationalityText, groupText].filter(Boolean).join(' ');
+
+  const dietary = details.dietaryRestrictions && details.dietaryRestrictions.length > 0
+    ? `\n🥗 القيود الغذائية: ${details.dietaryRestrictions.join('، ')}`
+    : '';
+
+  const mobility = details.mobilityNotes && details.mobilityNotes.trim().length > 0
+    ? `\n♿ ملاحظة التنقل: ${details.mobilityNotes.trim()}`
+    : '';
+
+  const extraNotes = details.notes && details.notes.trim().length > 0
+    ? `\n📝 ملاحظات إضافية: ${details.notes.trim()}`
+    : '';
+
+  return `السلام عليكم ورحمة الله، حياك الله أخوي الكريم 👋
+
+معك منسق العمليات في There DMC.
+حابين ننسق معكم لحجز تجربة "${title}" لـ ${groupDetails}.
+
+🗓️ التاريخ: ${date}
+⏰ الوقت: ${timeInfo}${dietary}${mobility}${extraNotes}
+
+الله يسعدك ودنا نتأكد من جاهزيتكم وإمكانية استقبال الوفد وملاءمة هذه المتطلبات؟ 
+
+شاكرين ومقدرين تعاونكم الدائم 🙏`;
 }
 
 /**
@@ -85,72 +114,10 @@ export async function sendProviderNotification(
   const endpoint = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`;
 
   console.log(
-    `[WhatsApp Outbound] 📤 Initiating outbound booking notification to ${recipientPhone} for "${eventDetails.title}"...`
+    `[WhatsApp Outbound] 📤 Initiating natural human-like booking notification to ${recipientPhone} for "${eventDetails.title}"...`
   );
 
-  // Strategy A: Interactive Button Message (allows 1-tap confirmation from provider)
-  if (eventDetails.id) {
-    try {
-      const interactivePayload = {
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to: recipientPhone,
-        type: 'interactive',
-        interactive: {
-          type: 'button',
-          body: {
-            text: messageText,
-          },
-          action: {
-            buttons: [
-              {
-                type: 'reply',
-                reply: {
-                  id: `accept_booking_${eventDetails.id}`,
-                  title: 'تأكيد الحجز ✅',
-                },
-              },
-            ],
-          },
-        },
-      };
-
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(interactivePayload),
-      });
-
-      const data = await response.json();
-
-      if (response.ok && data?.messages?.[0]?.id) {
-        const msgId = data.messages[0].id;
-        console.log(
-          `[WhatsApp Outbound] ✅ Interactive button message sent successfully! Message ID: ${msgId}`
-        );
-        return {
-          success: true,
-          messageId: msgId,
-          recipientPhone,
-          mode: 'interactive',
-        };
-      }
-
-      console.warn(
-        `[WhatsApp Outbound] ⚠️ Interactive message rejected (${data?.error?.message || response.status}). Retrying with simple text message...`
-      );
-    } catch (interactiveErr) {
-      console.warn(
-        '[WhatsApp Outbound] ⚠️ Interactive send threw exception. Falling back to plain text:',
-        interactiveErr
-      );
-    }
-  }
-
-  // Strategy B: Standard Text Message
+  // Send natural human-like text message directly (no bot buttons)
   try {
     const textPayload = {
       messaging_product: 'whatsapp',
@@ -177,7 +144,7 @@ export async function sendProviderNotification(
     if (textResponse.ok && textData?.messages?.[0]?.id) {
       const msgId = textData.messages[0].id;
       console.log(
-        `[WhatsApp Outbound] ✅ Text message sent successfully! Message ID: ${msgId}`
+        `[WhatsApp Outbound] ✅ Human-like text message sent successfully! Message ID: ${msgId}`
       );
       return {
         success: true,

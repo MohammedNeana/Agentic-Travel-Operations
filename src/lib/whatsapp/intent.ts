@@ -33,15 +33,17 @@ export async function classifyVoiceIntent(
     );
   }
 
-  const systemPrompt = `You are an AI Incident Dispatcher for a Saudi Destination Management Company (DMC) receiving WhatsApp voice messages from tour guides, drivers, and travelers.
+  const systemPrompt = `You are an AI Incident Dispatcher & Booking Coordinator for a Saudi Destination Management Company (DMC) receiving WhatsApp messages (text or transcribed voice notes) from experience providers, suppliers, drivers, and tour guides.
 Classify the intent into strictly one of these categories:
-- "Delay": Travel delays, traffic jams, vehicle breakdowns, schedule postponements.
+- "Acceptance": The supplier confirms, accepts, or agrees to the booking request (e.g., "تم التأكيد", "نؤكد الحجز", "جاهزون للاستقبال", "نعم متاحين", "أهلاً وسهلاً").
+- "Rejection": The supplier declines, rejects, apologizes, or states they are unavailable or fully booked (e.g., "نعتذر", "غير متاحين", "المكان محجوز بالكامل", "لا يمكننا الاستقبال").
+- "Delay": Travel delays, traffic jams, vehicle breakdowns, or requests to postpone the start time.
 - "Emergency": Medical issues, injuries, lost persons, security or safety incidents.
-- "General": Casual queries, positive feedback, meal preferences, or routine questions.
+- "General": Casual queries, routine questions, or greetings.
 
 Respond ONLY with valid JSON in this exact structure:
 {
-  "category": "Delay" | "Emergency" | "General",
+  "category": "Acceptance" | "Rejection" | "Delay" | "Emergency" | "General",
   "confidence": 0.95,
   "reason": "Brief explanation in Arabic of why this category was chosen",
   "suggestedAction": "Suggested action in Arabic for the DMC operations dashboard"
@@ -66,7 +68,7 @@ Respond ONLY with valid JSON in this exact structure:
           model: currentModel,
           messages: [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: `Transcribed Arabic Voice Message:\n"${transcriptionText}"` },
+            { role: 'user', content: `Incoming Arabic WhatsApp Message (Text or Transcribed Audio):\n"${transcriptionText}"` },
           ],
           response_format: { type: 'json_object' },
           temperature: 0.1,
@@ -104,14 +106,17 @@ Respond ONLY with valid JSON in this exact structure:
       };
 
       let category: IntentCategory = 'General';
-      if (parsed.category === 'Emergency') category = 'Emergency';
+      if (parsed.category === 'Acceptance') category = 'Acceptance';
+      else if (parsed.category === 'Rejection') category = 'Rejection';
+      else if (parsed.category === 'Emergency') category = 'Emergency';
       else if (parsed.category === 'Delay') category = 'Delay';
 
       const isEscalationRequired = category === 'Emergency' || category === 'Delay';
 
-      console.log(`[Groq Intent] Successfully classified voice note with ${currentModel}:`, {
+      console.log(`[Groq Intent] Successfully classified WhatsApp message with ${currentModel}:`, {
         category,
         isEscalationRequired,
+        reason: parsed.reason,
       });
 
       return {
@@ -130,5 +135,10 @@ Respond ONLY with valid JSON in this exact structure:
     }
   }
 
-  throw lastError || new Error('Failed to classify voice intent with available Groq models.');
+  throw lastError || new Error('Failed to classify WhatsApp message intent with available Groq models.');
 }
+
+/**
+ * Alias for classifying any WhatsApp message (text body or transcribed audio).
+ */
+export const classifyWhatsAppMessageIntent = classifyVoiceIntent;

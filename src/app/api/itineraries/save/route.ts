@@ -22,10 +22,24 @@ interface SaveEventPayload {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { itineraryId, tenantId, events } = body as {
+    const {
+      itineraryId,
+      tenantId,
+      events,
+      travelerNationality,
+      groupSize,
+      dietaryRestrictions,
+      mobilityNotes,
+      additionalNotes,
+    } = body as {
       itineraryId: string;
       tenantId?: string;
       events: SaveEventPayload[];
+      travelerNationality?: string;
+      groupSize?: number;
+      dietaryRestrictions?: string[];
+      mobilityNotes?: string;
+      additionalNotes?: string;
     };
 
     if (!itineraryId) {
@@ -37,6 +51,38 @@ export async function POST(req: NextRequest) {
 
     const supabase = createServerSupabaseClient();
     const fallbackTenantId = tenantId;
+
+    // Resolve traveler details for vendor notification (strictly omitting name for privacy)
+    let finalNationality = travelerNationality;
+    let finalGroupSize = groupSize;
+    let finalDietary = dietaryRestrictions;
+    let finalMobility = mobilityNotes;
+
+    if (!finalNationality || !finalGroupSize || !finalDietary || !finalMobility) {
+      const { data: itinData } = await supabase
+        .from('itineraries')
+        .select('guest_count, traveler_profile_id')
+        .eq('id', itineraryId)
+        .single();
+
+      if (itinData) {
+        if (!finalGroupSize) finalGroupSize = itinData.guest_count;
+        if (itinData.traveler_profile_id) {
+          const { data: profileData } = await supabase
+            .from('traveler_profiles')
+            .select('nationality, group_size, dietary_restrictions, mobility_notes')
+            .eq('id', itinData.traveler_profile_id)
+            .single();
+
+          if (profileData) {
+            if (!finalNationality) finalNationality = profileData.nationality;
+            if (!finalGroupSize) finalGroupSize = profileData.group_size;
+            if (!finalDietary) finalDietary = profileData.dietary_restrictions;
+            if (!finalMobility) finalMobility = profileData.mobility_notes;
+          }
+        }
+      }
+    }
 
     // 1. Fetch current existing events in the database for this itinerary
     const { data: existingEvents, error: fetchErr } = await supabase
@@ -166,6 +212,12 @@ export async function POST(req: NextRequest) {
           title: ev.title,
           date: ev.eventDate,
           time: ev.startTime,
+          endTime: ev.endTime,
+          groupNationality: finalNationality || 'دولي',
+          groupSize: finalGroupSize || 2,
+          dietaryRestrictions: finalDietary,
+          mobilityNotes: finalMobility,
+          notes: ev.description || additionalNotes,
           providerName,
         });
 

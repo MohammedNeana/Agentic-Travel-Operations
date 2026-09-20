@@ -106,11 +106,21 @@ export function extractWhatsAppMessages(
           const replyId = btnReply?.id || listReply?.id || '';
           const replyTitle = btnReply?.title || listReply?.title || '';
 
-          const match = replyId.match(/^accept_booking[_-](.+)$/i);
-          if (match && match[1]) {
+          const acceptMatch = replyId.match(/^accept_booking[_-](.+)$/i);
+          if (acceptMatch && acceptMatch[1]) {
             action = {
               type: 'accept_booking',
-              eventId: match[1].trim(),
+              eventId: acceptMatch[1].trim(),
+              rawButtonId: replyId,
+              buttonTitle: replyTitle,
+            };
+          }
+
+          const rejectMatch = replyId.match(/^reject_booking[_-](.+)$/i);
+          if (rejectMatch && rejectMatch[1]) {
+            action = {
+              type: 'reject_booking',
+              eventId: rejectMatch[1].trim(),
               rawButtonId: replyId,
               buttonTitle: replyTitle,
             };
@@ -127,12 +137,16 @@ export function extractWhatsAppMessages(
           };
         }
 
+        // 3. Text Message Body
+        const textBody = msg.text?.body ? msg.text.body.trim() : undefined;
+
         parsedMessages.push({
           messageId: msg.id,
           fromPhoneNumber: msg.from,
           contactName,
           timestamp: msg.timestamp,
           rawType: msg.type,
+          textBody,
           action,
           audio,
         });

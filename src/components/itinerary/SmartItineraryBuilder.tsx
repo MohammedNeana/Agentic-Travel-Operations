@@ -322,6 +322,10 @@ export function SmartItineraryBuilder({
           itineraryId: itinerary.id,
           tenantId: itinerary.tenantId,
           events: itineraryEvents,
+          travelerNationality: profile?.nationality,
+          groupSize: profile?.groupSize,
+          dietaryRestrictions: profile?.dietaryRestrictions,
+          mobilityNotes: profile?.mobilityNotes,
         }),
       });
 

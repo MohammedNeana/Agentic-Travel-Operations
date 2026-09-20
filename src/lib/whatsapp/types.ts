@@ -97,7 +97,7 @@ export interface WhatsAppWebhookPayload {
 // ─── Domain Processing Types ─────────────────────────────────
 
 export interface ParsedButtonAction {
-  type: 'accept_booking';
+  type: 'accept_booking' | 'reject_booking';
   eventId: string;
   rawButtonId: string;
   buttonTitle: string;
@@ -115,12 +115,13 @@ export interface ParsedMessageContext {
   fromPhoneNumber: string;
   contactName?: string;
   timestamp: string;
+  textBody?: string;
   action?: ParsedButtonAction;
   audio?: ParsedAudioMessage;
   rawType: string;
 }
 
-export type IntentCategory = 'Delay' | 'Emergency' | 'General';
+export type IntentCategory = 'Acceptance' | 'Rejection' | 'Delay' | 'Emergency' | 'General';
 
 export interface IntentClassificationResult {
   category: IntentCategory;
@@ -135,6 +136,7 @@ export interface WebhookProcessingResult {
   messageId?: string;
   actionTaken:
     | 'booking_confirmed'
+    | 'booking_rejected'
     | 'event_escalated'
     | 'voice_general_logged'
     | 'unhandled_action'
@@ -150,8 +152,12 @@ export interface ProviderNotificationDetails {
   title: string;
   date: string;
   time?: string;
+  endTime?: string;
   providerName?: string;
+  groupNationality?: string;
   groupSize?: number;
+  dietaryRestrictions?: string[];
+  mobilityNotes?: string;
   notes?: string;
 }
 

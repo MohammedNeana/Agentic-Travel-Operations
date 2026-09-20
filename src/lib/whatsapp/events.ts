@@ -60,6 +60,61 @@ export async function confirmItineraryEvent(eventId: string): Promise<EventUpdat
   };
 }
 
+/**
+ * Updates a specific itinerary event status to 'cancelled'.
+ * Triggered by WhatsApp button reply (reject_booking_{id}) or LLM intent classification (Rejection).
+ */
+export async function rejectItineraryEvent(
+  eventId: string,
+  reason = 'اعتذار المزود عن قبول الحجز'
+): Promise<EventUpdateResult> {
+  const supabase = createServerSupabaseClient();
+
+  const { data: event, error: fetchError } = await supabase
+    .from('itinerary_events')
+    .select('id, title, status')
+    .eq('id', eventId)
+    .single();
+
+  if (fetchError || !event) {
+    console.error(`Failed to find itinerary event with id ${eventId}:`, fetchError);
+    return {
+      success: false,
+      eventId,
+      error: `Event ${eventId} not found in database.`,
+    };
+  }
+
+  const { error: updateError } = await supabase
+    .from('itinerary_events')
+    .update({
+      status: 'cancelled',
+      escalation_reason: reason,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', eventId);
+
+  if (updateError) {
+    console.error(`Failed to update event ${eventId} to cancelled:`, updateError);
+    return {
+      success: false,
+      eventId,
+      previousStatus: event.status,
+      error: updateError.message,
+    };
+  }
+
+  console.log(`\x1b[33m[WhatsApp Rejection]\x1b[0m Event "${event.title}" marked as cancelled/rejected.`);
+
+  return {
+    success: true,
+    eventId: event.id,
+    previousStatus: event.status,
+    newStatus: 'cancelled',
+    title: event.title,
+  };
+}
+
 function normalizeArabic(text: string): string {
   return text
     .replace(/[\u064B-\u065F\u0670]/g, '') // remove diacritics / tashkeel
@@ -191,4 +246,79 @@ export async function escalateItineraryEvent(options?: {
     newStatus: 'escalated',
     title: currentEvent.title,
   };
+}
+
+/**
+ * Resolves the relevant itinerary event for a provider sending a freeform text or voice message.
+ */
+export async function findEventForProvider(options: {
+  senderPhone?: string;
+  messageText?: string;
+}): Promise<string | undefined> {
+  const supabase = createServerSupabaseClient();
+
+  // 1. Try finding by provider's phone number
+  if (options.senderPhone) {
+    const cleaned = options.senderPhone.replace(/[^\d]/g, '');
+    const lastDigits = cleaned.slice(-8); // match last 8 digits for Saudi local / intl format
+
+    const { data: providers } = await supabase
+      .from('experience_providers')
+      .select('id, phone_number');
+
+    const matchingProvider = providers?.find((p) => {
+      const pCleaned = (p.phone_number || '').replace(/[^\d]/g, '');
+      return pCleaned.endsWith(lastDigits) || (lastDigits.length >= 7 && cleaned.endsWith(pCleaned.slice(-7)));
+    });
+
+    if (matchingProvider) {
+      // Find active planned event for this provider
+      const { data: events } = await supabase
+        .from('itinerary_events')
+        .select('id')
+        .eq('experience_provider_id', matchingProvider.id)
+        .eq('status', 'planned')
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (events && events.length > 0) {
+        console.log(`[Event Finder] 📱 Matched event ${events[0].id} by provider phone: ${options.senderPhone}`);
+        return events[0].id;
+      }
+    }
+  }
+
+  // 2. Try keyword matching against event titles
+  if (options.messageText) {
+    const { data: allActiveEvents } = await supabase
+      .from('itinerary_events')
+      .select('id, title')
+      .eq('status', 'planned')
+      .order('created_at', { ascending: false });
+
+    if (allActiveEvents && allActiveEvents.length > 0) {
+      const normText = normalizeArabic(options.messageText);
+      for (const ev of allActiveEvents) {
+        const normTitle = normalizeArabic(ev.title);
+        const words = normTitle.split(/\s+/).filter((w) => w.length >= 2 && !ARABIC_STOP_WORDS.has(w));
+        for (const w of words) {
+          if (normText.includes(w)) {
+            console.log(`[Event Finder] 🎯 Matched event ${ev.id} (${ev.title}) by keyword in message.`);
+            return ev.id;
+          }
+        }
+      }
+      return allActiveEvents[0].id;
+    }
+  }
+
+  // 3. Fallback to latest planned event
+  const { data: fallbackEvents } = await supabase
+    .from('itinerary_events')
+    .select('id')
+    .eq('status', 'planned')
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  return fallbackEvents?.[0]?.id;
 }
