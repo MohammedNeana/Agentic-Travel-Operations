@@ -43,7 +43,7 @@ interface ExperienceProviderItem {
 export default function ProvidersPage() {
   const [providers, setProviders] = useState<ExperienceProviderItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [tenantId, setTenantId] = useState<string>('a1b2c3d4-0001-4000-8000-000000000001');
+  const [tenantId, setTenantId] = useState<string>('');
 
   const dynamicSuggestions = useMemo(() => {
     const set = new Set<string>();
@@ -99,10 +99,22 @@ export default function ProvidersPage() {
 
   useEffect(() => {
     const supabase = createBrowserSupabaseClient();
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      const activeTenant = session?.user?.user_metadata?.tenant_id || 'a1b2c3d4-0001-4000-8000-000000000001';
-      setTenantId(activeTenant);
-      loadProviders(activeTenant);
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      let activeTenant = session?.user?.user_metadata?.tenant_id;
+      if (!activeTenant) {
+        const { data: org } = await supabase
+          .from('organizations')
+          .select('tenant_id')
+          .limit(1)
+          .maybeSingle();
+        activeTenant = org?.tenant_id;
+      }
+      if (activeTenant) {
+        setTenantId(activeTenant);
+        loadProviders(activeTenant);
+      } else {
+        setIsLoading(false);
+      }
     });
   }, []);
 

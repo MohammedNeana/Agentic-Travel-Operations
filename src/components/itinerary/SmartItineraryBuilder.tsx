@@ -110,7 +110,7 @@ export function SmartItineraryBuilder({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             interests: newProfile.interests,
-            tenant_id: newProfile.tenantId || itinerary?.tenantId || 'a1b2c3d4-0001-4000-8000-000000000001',
+            tenant_id: newProfile.tenantId || itinerary?.tenantId || undefined,
           }),
         }),
         fetch(`/api/itineraries?traveler_id=${newProfile.id}`),
@@ -145,7 +145,7 @@ export function SmartItineraryBuilder({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           interests: profile?.interests,
-          tenant_id: profile?.tenantId || itinerary?.tenantId || 'a1b2c3d4-0001-4000-8000-000000000001',
+          tenant_id: profile?.tenantId || itinerary?.tenantId || undefined,
         }),
       });
       const data = await res.json();
@@ -188,8 +188,8 @@ export function SmartItineraryBuilder({
 
     const newEvent: ItineraryEvent = {
       id: crypto.randomUUID(),
-      tenantId: itinerary?.tenantId || profile?.tenantId || 'a1b2c3d4-0001-4000-8000-000000000001',
-      itineraryId: itinerary?.id || 'c1b2c3d4-0001-4000-8000-000000000001',
+      tenantId: itinerary?.tenantId || profile?.tenantId || '',
+      itineraryId: itinerary?.id || '',
       experienceProviderId: provider.id,
       title: provider.name,
       description: `تجربة ${provider.experienceType} مميزة في ${provider.city} مع مزود محلي معتمد.`,

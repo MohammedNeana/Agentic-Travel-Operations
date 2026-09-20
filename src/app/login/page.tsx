@@ -35,11 +35,22 @@ export default function LoginPage() {
     const supabase = createBrowserSupabaseClient();
 
     try {
-      if (isRegister) {
-        const isDefaultOrg = !companyName.trim() || companyName.trim().toLowerCase() === 'there dmc';
-        const autoTenantId = isDefaultOrg
-          ? 'a1b2c3d4-0001-4000-8000-000000000001'
-          : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'a1b2c3d4-0001-4000-8000-000000000001');
+        let autoTenantId = '';
+        if (!companyName.trim() || companyName.trim().toLowerCase() === 'there dmc') {
+          const { data: org } = await supabase
+            .from('organizations')
+            .select('tenant_id')
+            .limit(1)
+            .maybeSingle();
+          if (org?.tenant_id) {
+            autoTenantId = org.tenant_id;
+          }
+        }
+        if (!autoTenantId) {
+          autoTenantId = typeof crypto !== 'undefined' && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+        }
 
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),

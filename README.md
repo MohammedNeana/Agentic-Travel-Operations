@@ -1,4 +1,4 @@
-# ThereOps: AI-Powered Supply Intelligence & Autonomous Operations Platform for Saudi DMCs
+# Agentic Travel Operations: AI-Powered Supply Intelligence & Autonomous Operations Platform for DMCs
 
 [![Next.js 16](https://img.shields.io/badge/Next.js-16.3.4-black?logo=next.js&style=flat-square)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?logo=typescript&style=flat-square)](https://www.typescriptlang.org/)
@@ -8,9 +8,9 @@
 [![Tailwind CSS 4](https://img.shields.io/badge/Tailwind_CSS-v4-38B2AC?logo=tailwind-css&style=flat-square)](https://tailwindcss.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
-An enterprise-grade B2B SaaS platform engineered specifically for **Destination Management Companies (DMCs) operating across the Kingdom of Saudi Arabia** (AlUla, Riyadh, Asir, Jeddah, Tabuk, and NEOM). 
+An enterprise-grade B2B SaaS platform engineered specifically for **Destination Management Companies (DMCs)**.
 
-**ThereOps** bridges the gap between fragmented local experience creators scattered across social media and the high-stakes operational realities of running live multi-day tourist itineraries. It eliminates manual firefighting by combining **unstructured supplier extraction**, **hybrid semantic vector search**, **natural conversational WhatsApp dispatching**, and a **90% autonomous self-healing operations room** that absorbs delays and prevents schedule collapse before travelers are affected.
+**Agentic Travel Operations** bridges the gap between fragmented local experience creators scattered across social media and the high-stakes operational realities of running live multi-day tourist itineraries. It eliminates manual firefighting by combining **unstructured supplier extraction**, **hybrid semantic vector search**, **natural conversational WhatsApp dispatching**, and a **90% autonomous self-healing operations room** that absorbs delays and prevents schedule collapse before travelers are affected.
 
 ---
 
@@ -22,7 +22,7 @@ Saudi Arabia is experiencing a historic surge in luxury, cultural, and adventure
 2. **The "WhatsApp Phone-Tag" Bottleneck:** Local Saudi suppliers refuse to log into complex supplier portals or extranets. Coordinators spend hours sending manual WhatsApp texts and exchanging voice notes to negotiate availability, confirm guest counts, and relay special requests.
 3. **The 45-Minute Delay Cascade:** Saudi itineraries involve substantial transit times between desert resorts, heritage sites, and dining venues. When a morning 4x4 desert safari runs 90 minutes late, a human coordinator must scramble to make 4 to 6 frantic phone calls: push back lunch, alert the afternoon cultural guide, reschedule sunset viewing on Harrat Uwayrid, and shift the private stargazing dinner. By the time the coordinator finishes making calls, guests are already waiting, vendors are frustrated, and itineraries collapse.
 
-**ThereOps** was architected to replace this chaotic phone-tag cycle with **an autonomous, WhatsApp-native operations engine**.
+**Agentic Travel Operations** was architected to replace this chaotic phone-tag cycle with **an autonomous, WhatsApp-native operations engine**.
 
 ---
 
@@ -98,7 +98,7 @@ flowchart TD
 
 ## Operational Performance Benchmark
 
-| Metric | Traditional Manual DMC Operations | ThereOps Autonomous Platform | Impact / Improvement |
+| Metric | Traditional Manual DMC Operations | Agentic Travel Operations Autonomous Platform | Impact / Improvement |
 | :--- | :--- | :--- | :--- |
 | **Disruption Resolution Time** | 35 – 50 minutes (frantic phone calls) | **< 4 seconds** (automatic cascade) | **99% faster incident recovery** |
 | **Downstream Supplier Notice** | Often forgotten or relayed late | **Instant automated WhatsApp dispatch** | **Zero vendor double-booking or no-shows** |
@@ -143,7 +143,7 @@ Every table (`organizations`, `experience_providers`, `itineraries`, `itinerary_
 ## Project Directory Structure
 
 ```
-there-dmc-challenge/
+Agentic-Travel-Operations/
 ├── src/
 │   ├── app/
 │   │   ├── page.tsx                     # Smart Itinerary Builder & Live Operations Center
@@ -182,7 +182,7 @@ there-dmc-challenge/
 │           ├── client.ts                 # Browser Client with Realtime Subscription
 │           └── server.ts                 # Server Client with Tenant Session Forwarding
 └── public/
-    └── ThereOps_Solution_Deck.html      # Standalone Print-Ready Pitch Document
+    └── Agentic_Travel_Operations.html      # Standalone Print-Ready Pitch Document
 ```
 
 ---
@@ -191,8 +191,8 @@ there-dmc-challenge/
 
 ### 1. Clone & Install Dependencies
 ```bash
-git clone https://github.com/mohammedneana/there-dmc-challenge.git
-cd there-dmc-challenge
+git clone https://github.com/MohammedNeana/Agentic-Travel-Operations.git
+cd Agentic-Travel-Operations
 npm install
 ```
 

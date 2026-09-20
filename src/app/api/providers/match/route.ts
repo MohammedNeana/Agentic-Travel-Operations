@@ -139,9 +139,22 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const interestsParam = searchParams.get('interests');
     const interests = interestsParam ? interestsParam.split(',') : ['تراث وثقافة', 'سفاري صحراوي'];
-    const tenantId = searchParams.get('tenant_id') || 'a1b2c3d4-0001-4000-8000-000000000001';
-
     const supabase = createServerSupabaseClient();
+    let tenantId = searchParams.get('tenant_id')?.trim();
+    if (!tenantId) {
+      const { data: org } = await supabase
+        .from('organizations')
+        .select('tenant_id')
+        .limit(1)
+        .maybeSingle();
+      tenantId = org?.tenant_id;
+    }
+    if (!tenantId) {
+      return NextResponse.json(
+        { success: false, error: 'Tenant ID is required and could not be resolved.' },
+        { status: 400 }
+      );
+    }
 
     const { data: unindexedProviders, error: selectErr } = await supabase
       .from('experience_providers')
