@@ -17,11 +17,12 @@ async function resolveTenantId(providedTenantId?: string): Promise<string> {
   }
 
   const supabase = createServerSupabaseClient();
-  const { data: org } = await supabase
+  const { data } = await supabase
     .from('organizations')
     .select('tenant_id')
     .limit(1)
     .maybeSingle();
+  const org = data as { tenant_id?: string } | null;
 
   if (org?.tenant_id) {
     return org.tenant_id;
