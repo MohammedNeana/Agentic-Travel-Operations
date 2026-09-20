@@ -13,7 +13,10 @@ import {
   rejectItineraryEvent,
   escalateItineraryEvent,
   findEventForProvider,
+  getProviderCandidateEvents,
 } from '@/lib/whatsapp/events';
+import { sendWhatsAppTextMessage } from '@/lib/whatsapp/sender';
+import { orchestrateItineraryCascade } from '@/lib/whatsapp/orchestrator';
 
 export const dynamic = 'force-dynamic';
 
@@ -143,14 +146,52 @@ export async function POST(request: NextRequest) {
 
           console.log(`[WhatsApp Webhook] 🎙️ Transcribed audio from ${msg.fromPhoneNumber}: "${transcription.text}"`);
 
-          // 3. Classify voice intent via Groq LLM (Acceptance, Rejection, Delay, Emergency)
-          const classification = await classifyWhatsAppMessageIntent(transcription.text);
-
-          // 4. Resolve the relevant event for this provider
-          const targetEventId = await findEventForProvider({
+          // 3. Retrieve candidate groups/events for this provider
+          const candidateEvents = await getProviderCandidateEvents({
             senderPhone: msg.fromPhoneNumber,
-            messageText: transcription.text,
           });
+
+          // 4. Classify voice intent via Groq LLM with multi-group disambiguation
+          const classification = await classifyWhatsAppMessageIntent(transcription.text, {
+            candidateEvents,
+          });
+
+          // If the message is ambiguous between multiple groups, keep the conversation open
+          // by sending an LLM-generated human-like clarification question back to the provider
+          if (classification.isAmbiguous && classification.clarificationMessage) {
+            console.log(
+              `[WhatsApp Webhook] ❓ Ambiguous audio message between groups. Dispatching dynamic clarification to ${msg.fromPhoneNumber}...`
+            );
+
+            const replyResult = await sendWhatsAppTextMessage(
+              msg.fromPhoneNumber,
+              classification.clarificationMessage
+            );
+
+            processingResults.push({
+              success: replyResult.success,
+              messageId: msg.messageId,
+              actionTaken: 'clarification_requested',
+              details: {
+                from: msg.fromPhoneNumber,
+                transcriptionText: transcription.text,
+                clarificationMessage: classification.clarificationMessage,
+                sentMessageId: replyResult.messageId,
+                reason: classification.reason,
+                suggestedAction: classification.suggestedAction,
+              },
+              error: replyResult.error,
+            });
+            continue;
+          }
+
+          // 5. Resolve target event ID using LLM group matching (with rule-based fallback)
+          const targetEventId =
+            classification.matchedEventId ||
+            (await findEventForProvider({
+              senderPhone: msg.fromPhoneNumber,
+              messageText: transcription.text,
+            }));
 
           if (classification.category === 'Acceptance' && targetEventId) {
             const confirmResult = await confirmItineraryEvent(targetEventId);
@@ -162,6 +203,8 @@ export async function POST(request: NextRequest) {
                 eventId: targetEventId,
                 title: confirmResult.title,
                 transcriptionText: transcription.text,
+                matchedGroupSummary: classification.matchedGroupSummary,
+                isAmbiguous: classification.isAmbiguous,
                 reason: classification.reason,
               },
             });
@@ -175,33 +218,68 @@ export async function POST(request: NextRequest) {
                 eventId: targetEventId,
                 title: rejectResult.title,
                 transcriptionText: transcription.text,
+                matchedGroupSummary: classification.matchedGroupSummary,
+                isAmbiguous: classification.isAmbiguous,
                 reason: classification.reason,
               },
             });
           } else if (classification.isEscalationRequired) {
-            const escalationResult = await escalateItineraryEvent({
-              eventId: targetEventId,
-              transcriptionText: transcription.text,
-              reason: classification.reason,
-              senderPhone: msg.fromPhoneNumber,
-            });
+            // Autonomous AI Operations Orchestrator: analyzes delay, calculates ripple effect on downstream trips,
+            // shifts itinerary times in DB, and dispatches proactive human-like WhatsApp messages to next vendors.
+            if (targetEventId) {
+              const orchestrationResult = await orchestrateItineraryCascade({
+                eventId: targetEventId,
+                vendorMessage: transcription.text,
+                senderPhone: msg.fromPhoneNumber,
+              });
 
-            processingResults.push({
-              success: escalationResult.success,
-              messageId: msg.messageId,
-              actionTaken: 'event_escalated',
-              details: {
-                from: msg.fromPhoneNumber,
-                senderName: msg.contactName,
+              processingResults.push({
+                success: orchestrationResult.success,
+                messageId: msg.messageId,
+                actionTaken: 'schedule_cascade_orchestrated',
+                details: {
+                  from: msg.fromPhoneNumber,
+                  senderName: msg.contactName,
+                  transcriptionText: transcription.text,
+                  category: classification.category,
+                  matchedGroupSummary: classification.matchedGroupSummary,
+                  delayMinutes: orchestrationResult.decision?.delayMinutes,
+                  isCascadeImpact: orchestrationResult.decision?.isCascadeImpact,
+                  updatedEventsCount: orchestrationResult.updatedEventsCount,
+                  dispatchedNoticesCount: orchestrationResult.dispatchedNoticesCount,
+                  incidentSummary: orchestrationResult.incidentSummary,
+                  scheduleAdjustments: orchestrationResult.decision?.scheduleAdjustments,
+                  downstreamNotices: orchestrationResult.decision?.downstreamNotices,
+                },
+                error: orchestrationResult.error,
+              });
+            } else {
+              const escalationResult = await escalateItineraryEvent({
+                eventId: targetEventId,
                 transcriptionText: transcription.text,
-                category: classification.category,
                 reason: classification.reason,
-                suggestedAction: classification.suggestedAction,
-                escalatedEventId: escalationResult.eventId,
-                eventTitle: escalationResult.title,
-              },
-              error: escalationResult.error,
-            });
+                senderPhone: msg.fromPhoneNumber,
+              });
+
+              processingResults.push({
+                success: escalationResult.success,
+                messageId: msg.messageId,
+                actionTaken: 'event_escalated',
+                details: {
+                  from: msg.fromPhoneNumber,
+                  senderName: msg.contactName,
+                  transcriptionText: transcription.text,
+                  category: classification.category,
+                  matchedGroupSummary: classification.matchedGroupSummary,
+                  isAmbiguous: classification.isAmbiguous,
+                  reason: classification.reason,
+                  suggestedAction: classification.suggestedAction,
+                  escalatedEventId: escalationResult.eventId,
+                  eventTitle: escalationResult.title,
+                },
+                error: escalationResult.error,
+              });
+            }
           } else {
             processingResults.push({
               success: true,
@@ -211,6 +289,8 @@ export async function POST(request: NextRequest) {
                 from: msg.fromPhoneNumber,
                 transcriptionText: transcription.text,
                 category: classification.category,
+                matchedGroupSummary: classification.matchedGroupSummary,
+                isAmbiguous: classification.isAmbiguous,
                 reason: classification.reason,
               },
             });
@@ -234,14 +314,52 @@ export async function POST(request: NextRequest) {
         try {
           console.log(`[WhatsApp Webhook] 💬 Analyzing text message from ${msg.fromPhoneNumber}: "${msg.textBody}"`);
 
-          // 1. Classify intent via Groq LLM
-          const classification = await classifyWhatsAppMessageIntent(msg.textBody);
-
-          // 2. Resolve the relevant event for this provider
-          const targetEventId = await findEventForProvider({
+          // 1. Retrieve candidate groups/events for this provider
+          const candidateEvents = await getProviderCandidateEvents({
             senderPhone: msg.fromPhoneNumber,
-            messageText: msg.textBody,
           });
+
+          // 2. Classify intent via Groq LLM with multi-group disambiguation
+          const classification = await classifyWhatsAppMessageIntent(msg.textBody, {
+            candidateEvents,
+          });
+
+          // If the text message is ambiguous between multiple groups, keep the conversation open
+          // by sending an LLM-generated human-like clarification question back to the provider
+          if (classification.isAmbiguous && classification.clarificationMessage) {
+            console.log(
+              `[WhatsApp Webhook] ❓ Ambiguous text message between groups. Dispatching dynamic clarification to ${msg.fromPhoneNumber}...`
+            );
+
+            const replyResult = await sendWhatsAppTextMessage(
+              msg.fromPhoneNumber,
+              classification.clarificationMessage
+            );
+
+            processingResults.push({
+              success: replyResult.success,
+              messageId: msg.messageId,
+              actionTaken: 'clarification_requested',
+              details: {
+                from: msg.fromPhoneNumber,
+                textBody: msg.textBody,
+                clarificationMessage: classification.clarificationMessage,
+                sentMessageId: replyResult.messageId,
+                reason: classification.reason,
+                suggestedAction: classification.suggestedAction,
+              },
+              error: replyResult.error,
+            });
+            continue;
+          }
+
+          // 3. Resolve target event ID using LLM group matching (with rule-based fallback)
+          const targetEventId =
+            classification.matchedEventId ||
+            (await findEventForProvider({
+              senderPhone: msg.fromPhoneNumber,
+              messageText: msg.textBody,
+            }));
 
           if (classification.category === 'Acceptance' && targetEventId) {
             const confirmResult = await confirmItineraryEvent(targetEventId);
@@ -253,6 +371,8 @@ export async function POST(request: NextRequest) {
                 eventId: targetEventId,
                 title: confirmResult.title,
                 textBody: msg.textBody,
+                matchedGroupSummary: classification.matchedGroupSummary,
+                isAmbiguous: classification.isAmbiguous,
                 reason: classification.reason,
               },
             });
@@ -266,33 +386,68 @@ export async function POST(request: NextRequest) {
                 eventId: targetEventId,
                 title: rejectResult.title,
                 textBody: msg.textBody,
+                matchedGroupSummary: classification.matchedGroupSummary,
+                isAmbiguous: classification.isAmbiguous,
                 reason: classification.reason,
               },
             });
           } else if (classification.isEscalationRequired) {
-            const escalationResult = await escalateItineraryEvent({
-              eventId: targetEventId,
-              transcriptionText: msg.textBody,
-              reason: classification.reason,
-              senderPhone: msg.fromPhoneNumber,
-            });
+            // Autonomous AI Operations Orchestrator: analyzes delay, calculates ripple effect on downstream trips,
+            // shifts itinerary times in DB, and dispatches proactive human-like WhatsApp messages to next vendors.
+            if (targetEventId) {
+              const orchestrationResult = await orchestrateItineraryCascade({
+                eventId: targetEventId,
+                vendorMessage: msg.textBody,
+                senderPhone: msg.fromPhoneNumber,
+              });
 
-            processingResults.push({
-              success: escalationResult.success,
-              messageId: msg.messageId,
-              actionTaken: 'event_escalated',
-              details: {
-                from: msg.fromPhoneNumber,
-                senderName: msg.contactName,
-                textBody: msg.textBody,
-                category: classification.category,
+              processingResults.push({
+                success: orchestrationResult.success,
+                messageId: msg.messageId,
+                actionTaken: 'schedule_cascade_orchestrated',
+                details: {
+                  from: msg.fromPhoneNumber,
+                  senderName: msg.contactName,
+                  textBody: msg.textBody,
+                  category: classification.category,
+                  matchedGroupSummary: classification.matchedGroupSummary,
+                  delayMinutes: orchestrationResult.decision?.delayMinutes,
+                  isCascadeImpact: orchestrationResult.decision?.isCascadeImpact,
+                  updatedEventsCount: orchestrationResult.updatedEventsCount,
+                  dispatchedNoticesCount: orchestrationResult.dispatchedNoticesCount,
+                  incidentSummary: orchestrationResult.incidentSummary,
+                  scheduleAdjustments: orchestrationResult.decision?.scheduleAdjustments,
+                  downstreamNotices: orchestrationResult.decision?.downstreamNotices,
+                },
+                error: orchestrationResult.error,
+              });
+            } else {
+              const escalationResult = await escalateItineraryEvent({
+                eventId: targetEventId,
+                transcriptionText: msg.textBody,
                 reason: classification.reason,
-                suggestedAction: classification.suggestedAction,
-                escalatedEventId: escalationResult.eventId,
-                eventTitle: escalationResult.title,
-              },
-              error: escalationResult.error,
-            });
+                senderPhone: msg.fromPhoneNumber,
+              });
+
+              processingResults.push({
+                success: escalationResult.success,
+                messageId: msg.messageId,
+                actionTaken: 'event_escalated',
+                details: {
+                  from: msg.fromPhoneNumber,
+                  senderName: msg.contactName,
+                  textBody: msg.textBody,
+                  category: classification.category,
+                  matchedGroupSummary: classification.matchedGroupSummary,
+                  isAmbiguous: classification.isAmbiguous,
+                  reason: classification.reason,
+                  suggestedAction: classification.suggestedAction,
+                  escalatedEventId: escalationResult.eventId,
+                  eventTitle: escalationResult.title,
+                },
+                error: escalationResult.error,
+              });
+            }
           } else {
             processingResults.push({
               success: true,
@@ -302,6 +457,8 @@ export async function POST(request: NextRequest) {
                 from: msg.fromPhoneNumber,
                 textBody: msg.textBody,
                 category: classification.category,
+                matchedGroupSummary: classification.matchedGroupSummary,
+                isAmbiguous: classification.isAmbiguous,
                 reason: classification.reason,
               },
             });

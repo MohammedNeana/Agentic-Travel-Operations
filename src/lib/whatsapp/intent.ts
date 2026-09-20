@@ -1,4 +1,4 @@
-import type { IntentCategory, IntentClassificationResult } from './types';
+import type { IntentCategory, IntentClassificationResult, CandidateGroupEvent } from './types';
 
 interface GroqChatCompletionResponse {
   choices?: Array<{
@@ -13,18 +13,67 @@ interface GroqChatCompletionResponse {
   };
 }
 
+export interface ClassifyIntentOptions {
+  candidateEvents?: CandidateGroupEvent[];
+  apiKey?: string;
+  model?: string;
+}
+
 /**
- * Classifies transcribed voice note intent using Groq's OpenAI-compatible Chat API.
- * Uses Groq's active production models (openai/gpt-oss-120b, openai/gpt-oss-20b, qwen/qwen3.6-27b).
- * Base URL: https://api.groq.com/openai/v1
+ * Formats candidate provider events into a readable structured prompt block
+ * for the LLM to perform group disambiguation.
+ */
+function formatCandidateEventsForPrompt(events: CandidateGroupEvent[]): string {
+  if (!events || events.length === 0) {
+    return 'No specific pre-registered candidate groups provided.';
+  }
+
+  return events
+    .map((ev, index) => {
+      const dietary =
+        ev.dietaryRestrictions && ev.dietaryRestrictions.length > 0
+          ? `\n  - القيود الغذائية: ${ev.dietaryRestrictions.join('، ')}`
+          : '';
+      const mobility = ev.mobilityNotes ? `\n  - ملاحظات التنقل: ${ev.mobilityNotes}` : '';
+
+      return `[المجموعة ${index + 1}]:
+  - معرف الفعالية (eventId): "${ev.eventId}"
+  - عنوان التجربة: "${ev.title}"
+  - التاريخ: ${ev.eventDate}
+  - التوقيت: من ${ev.startTime} إلى ${ev.endTime} (${ev.timePeriod || ''})
+  - السياق الزمني النسبي: ${ev.timeContextDescription || ev.timeContext || 'غير محدد'}
+  - الحالة الراهنة: ${ev.status}
+  - جنسية الوفد: ${ev.nationality || 'دولي'}
+  - عدد الضيوف: ${ev.groupSize || 2} أشخاص${dietary}${mobility}`;
+    })
+    .join('\n\n');
+}
+
+/**
+ * Classifies transcribed voice notes or text messages using Groq's LLM API,
+ * with intelligent multi-group disambiguation (identifying which group is running now,
+ * upcoming, or delayed/experiencing an emergency).
  */
 export async function classifyVoiceIntent(
   transcriptionText: string,
-  apiKey = process.env.GROQ_API_KEY,
-  model = process.env.GROQ_LLM_MODEL || 'openai/gpt-oss-120b'
+  optionsOrApiKey?: string | ClassifyIntentOptions,
+  legacyModel?: string
 ): Promise<IntentClassificationResult> {
   if (!transcriptionText || transcriptionText.trim().length === 0) {
     throw new Error('Cannot classify intent: Transcribed voice note text is empty.');
+  }
+
+  let apiKey = process.env.GROQ_API_KEY;
+  let model = process.env.GROQ_LLM_MODEL || 'openai/gpt-oss-120b';
+  let candidateEvents: CandidateGroupEvent[] | undefined;
+
+  if (typeof optionsOrApiKey === 'string') {
+    apiKey = optionsOrApiKey;
+    if (legacyModel) model = legacyModel;
+  } else if (typeof optionsOrApiKey === 'object' && optionsOrApiKey !== null) {
+    if (optionsOrApiKey.apiKey) apiKey = optionsOrApiKey.apiKey;
+    if (optionsOrApiKey.model) model = optionsOrApiKey.model;
+    candidateEvents = optionsOrApiKey.candidateEvents;
   }
 
   if (!apiKey) {
@@ -33,23 +82,63 @@ export async function classifyVoiceIntent(
     );
   }
 
-  const systemPrompt = `You are an AI Incident Dispatcher & Booking Coordinator for a Saudi Destination Management Company (DMC) receiving WhatsApp messages (text or transcribed voice notes) from experience providers, suppliers, drivers, and tour guides.
-Classify the intent into strictly one of these categories:
-- "Acceptance": The supplier confirms, accepts, or agrees to the booking request (e.g., "تم التأكيد", "نؤكد الحجز", "جاهزون للاستقبال", "نعم متاحين", "أهلاً وسهلاً").
-- "Rejection": The supplier declines, rejects, apologizes, or states they are unavailable or fully booked (e.g., "نعتذر", "غير متاحين", "المكان محجوز بالكامل", "لا يمكننا الاستقبال").
-- "Delay": Travel delays, traffic jams, vehicle breakdowns, or requests to postpone the start time.
-- "Emergency": Medical issues, injuries, lost persons, security or safety incidents.
-- "General": Casual queries, routine questions, or greetings.
+  const systemPrompt = `You are an AI Incident Dispatcher & Booking Coordinator for a Saudi Destination Management Company (DMC).
+You analyze incoming WhatsApp messages (text or transcribed voice notes) from experience providers, suppliers, and tour guides.
+
+The provider may have multiple separate traveler groups (e.g., one group running right now, one group starting in a while / upcoming, or one group from earlier, with different group sizes or nationalities).
+
+YOUR CRITICAL OBJECTIVES:
+1. Classify the intent into strictly one of these categories:
+   - "Acceptance": The supplier confirms, accepts, or agrees to the booking request (e.g., "تم التأكيد", "نؤكد الحجز", "جاهزون للاستقبال", "نعم متاحين").
+   - "Rejection": The supplier declines, rejects, apologizes, or states they are unavailable (e.g., "نعتذر", "غير متاحين", "المكان محجوز بالكامل", "لا يمكننا الاستقبال").
+   - "Delay": Travel delays, traffic jams, vehicle breakdowns, or requests to postpone the start time.
+   - "Emergency": Medical issues, injuries, accidents, lost persons, safety incidents.
+   - "General": Casual queries, routine questions, or greetings.
+
+2. MULTI-GROUP DISAMBIGUATION (CRITICAL):
+   - You MUST determine WHICH SPECIFIC GROUP/EVENT the provider is referring to from the candidate list below.
+   - Examine timing clues:
+     * "اللي شغال الحين", "الحين", "حالياً" -> refers to the running_now group.
+     * "بعد شوي", "القادم", "القروب الثاني", "العصر", "المساء", "الساعة 4" -> refers to the upcoming / later group.
+     * "الصباح", "اللي راح", "الأولى", "أمس" -> refers to the earlier or morning group.
+   - Examine group demographics:
+     * Nationality: e.g., "الإيطاليين", "اليابانيين", "الألمان".
+     * Group size: e.g., "الـ 6 أشخاص", "المجموعة الكبيرة", "شخصين", "الـ 4".
+     * Activity or title keywords.
+    - Set "matchedEventId" to the exact eventId of the matched group. If no candidate groups exist or the message is completely generic, set it to null.
+    - Set "matchedGroupSummary" to a concise Arabic description of the matched group (e.g. "وفد إيطالي (6 أشخاص) - موعد العصر 15:00").
+    - If multiple candidate groups exist and the message is ambiguous (cannot tell which group is affected), set "isAmbiguous": true, explain the ambiguity in "reason", and suggest DMC operations to verify.
+
+3. CONVERSATIONAL CLARIFICATION & KEEPING THE CHAT OPEN:
+   - When "isAmbiguous" is true (the message is not specific enough to determine which group they mean, or you need more details from the provider):
+     You MUST generate "clarificationMessage" containing a warm, polite, and natural human-like Arabic WhatsApp reply from the DMC operations coordinator to send back to the provider.
+     Guidelines for "clarificationMessage":
+     * Tone: Natural, friendly, and respectful Saudi Arabic hospitality style (e.g. "حياك الله أخوي الكريم", "الله يسعدك", "ودنا نتأكد معك").
+     * NO static templates or robotic bot phrases. Keep the conversation open and fluid!
+     * Specifically reference the candidate groups they have with distinguishing traits (e.g. mention the running group in the morning vs. the upcoming afternoon group of 6 people, or their respective times/nationalities).
+     * Ask them politely to clarify which group they meant so you can take immediate action and update the schedule.
+     * Encourage them to reply simply with a quick text or voice note (e.g. "تقدر ترد علي هنا مباشرة برسالة أو فويس نوت عشان ننسق معك فوراً 🙏").
+   - If "isAmbiguous" is false, "clarificationMessage" should be null.
 
 Respond ONLY with valid JSON in this exact structure:
 {
   "category": "Acceptance" | "Rejection" | "Delay" | "Emergency" | "General",
   "confidence": 0.95,
-  "reason": "Brief explanation in Arabic of why this category was chosen",
+  "matchedEventId": "eventId-string" | null,
+  "matchedGroupSummary": "Arabic summary of matched group" | null,
+  "isAmbiguous": false,
+  "clarificationMessage": "Warm human-like Arabic reply asking for clarification if ambiguous, or null",
+  "reason": "Brief explanation in Arabic of why this category was chosen AND why this specific group was identified",
   "suggestedAction": "Suggested action in Arabic for the DMC operations dashboard"
 }`;
 
-  // Candidate models to try in sequence if a specific model was deprecated or not accessible on this key
+  const candidateBlock =
+    candidateEvents && candidateEvents.length > 0
+      ? `\n\n--- مجموعات الحجوزات النشطة للمزود (Candidate Groups for this Provider) ---\n${formatCandidateEventsForPrompt(
+          candidateEvents
+        )}`
+      : '';
+
   const candidateModels = process.env.GROQ_LLM_MODEL
     ? [process.env.GROQ_LLM_MODEL]
     : [model, 'openai/gpt-oss-20b', 'qwen/qwen3.6-27b'];
@@ -68,7 +157,10 @@ Respond ONLY with valid JSON in this exact structure:
           model: currentModel,
           messages: [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: `Incoming Arabic WhatsApp Message (Text or Transcribed Audio):\n"${transcriptionText}"` },
+            {
+              role: 'user',
+              content: `Incoming Arabic WhatsApp Message (Text or Transcribed Audio):\n"${transcriptionText}"${candidateBlock}`,
+            },
           ],
           response_format: { type: 'json_object' },
           temperature: 0.1,
@@ -80,10 +172,11 @@ Respond ONLY with valid JSON in this exact structure:
         const err = new Error(
           `Groq Chat Completion API (${currentModel}) failed [HTTP ${response.status}]: ${errorText}`
         );
-        // If it's a 404 / model deprecated error, try the next model candidate
         if (response.status === 404 || response.status === 400) {
           lastError = err;
-          console.warn(`Groq model ${currentModel} returned HTTP ${response.status}, trying next available model...`);
+          console.warn(
+            `Groq model ${currentModel} returned HTTP ${response.status}, trying next available model...`
+          );
           continue;
         }
         throw err;
@@ -96,11 +189,14 @@ Respond ONLY with valid JSON in this exact structure:
         throw new Error(`Groq LLM (${currentModel}) returned an empty response content.`);
       }
 
-      // Handle potential markdown code fences: ```json ... ```
       const cleaned = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
       const parsed = JSON.parse(cleaned) as {
         category?: string;
         confidence?: number;
+        matchedEventId?: string | null;
+        matchedGroupSummary?: string | null;
+        isAmbiguous?: boolean;
+        clarificationMessage?: string | null;
         reason?: string;
         suggestedAction?: string;
       };
@@ -113,8 +209,34 @@ Respond ONLY with valid JSON in this exact structure:
 
       const isEscalationRequired = category === 'Emergency' || category === 'Delay';
 
+      let matchedEventId: string | null = parsed.matchedEventId || null;
+      if (!matchedEventId && candidateEvents && candidateEvents.length === 1) {
+        matchedEventId = candidateEvents[0].eventId;
+      }
+
+      let matchedGroupSummary = parsed.matchedGroupSummary || undefined;
+      if (matchedEventId && !matchedGroupSummary && candidateEvents) {
+        const matched = candidateEvents.find((c) => c.eventId === matchedEventId);
+        if (matched) {
+          matchedGroupSummary = `وفد (${matched.nationality || 'دولي'}) ${matched.groupSize || ''} أشخاص - ${matched.startTime}`;
+        }
+      }
+
+      let clarificationMessage = parsed.clarificationMessage?.trim() || undefined;
+      // Dynamic fallback if isAmbiguous is true but LLM omitted clarificationMessage
+      if (parsed.isAmbiguous && !clarificationMessage && candidateEvents && candidateEvents.length > 1) {
+        const groupsList = candidateEvents
+          .map((c) => `رحلة (${c.timePeriod || c.startTime}) لـ ${c.nationality || 'وفد'}`)
+          .join(' أو ');
+        clarificationMessage = `حياك الله أخوي الكريم 👋، الله يسعدك بس للتأكيد قصدك ${groupsList}؟ رد علي هنا برسالة أو فويس نوت عشان ننسق فوراً ونحدث الجدول 🙏`;
+      }
+
       console.log(`[Groq Intent] Successfully classified WhatsApp message with ${currentModel}:`, {
         category,
+        matchedEventId,
+        matchedGroupSummary,
+        isAmbiguous: Boolean(parsed.isAmbiguous),
+        clarificationMessage: clarificationMessage ? `${clarificationMessage.slice(0, 50)}...` : null,
         isEscalationRequired,
         reason: parsed.reason,
       });
@@ -122,13 +244,16 @@ Respond ONLY with valid JSON in this exact structure:
       return {
         category,
         confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.95,
+        matchedEventId,
+        matchedGroupSummary,
+        isAmbiguous: Boolean(parsed.isAmbiguous),
+        clarificationMessage,
         reason: parsed.reason || '',
         suggestedAction: parsed.suggestedAction || '',
         isEscalationRequired,
       };
     } catch (err: unknown) {
       lastError = err instanceof Error ? err : new Error(String(err));
-      // If it's not a model error, propagate immediately
       if (!lastError.message.includes('HTTP 404') && !lastError.message.includes('HTTP 400')) {
         throw lastError;
       }

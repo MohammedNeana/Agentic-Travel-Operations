@@ -123,12 +123,33 @@ export interface ParsedMessageContext {
 
 export type IntentCategory = 'Acceptance' | 'Rejection' | 'Delay' | 'Emergency' | 'General';
 
+export interface CandidateGroupEvent {
+  eventId: string;
+  title: string;
+  eventDate: string;
+  startTime: string;
+  endTime: string;
+  timePeriod?: string; // e.g. "صباحاً (Morning)" or "عصراً/مساءً (Afternoon)"
+  timeContext?: 'running_now' | 'upcoming_today' | 'past_today' | 'future_date' | 'past_date';
+  timeContextDescription?: string; // e.g. "جاري حالياً" or "بعد قليل / اليوم عصراً"
+  status: string;
+  nationality?: string;
+  groupSize?: number;
+  dietaryRestrictions?: string[];
+  mobilityNotes?: string;
+  description?: string;
+}
+
 export interface IntentClassificationResult {
   category: IntentCategory;
   confidence: number;
   reason: string;
   suggestedAction: string;
   isEscalationRequired: boolean;
+  matchedEventId?: string | null;
+  matchedGroupSummary?: string;
+  isAmbiguous?: boolean;
+  clarificationMessage?: string;
 }
 
 export interface WebhookProcessingResult {
@@ -138,10 +159,51 @@ export interface WebhookProcessingResult {
     | 'booking_confirmed'
     | 'booking_rejected'
     | 'event_escalated'
+    | 'schedule_cascade_orchestrated'
+    | 'clarification_requested'
     | 'voice_general_logged'
     | 'unhandled_action'
     | 'no_action_needed';
   details?: Record<string, unknown>;
+  error?: string;
+}
+
+// ─── AI Operations Orchestration Types ─────────────────────────
+
+export interface ScheduleAdjustment {
+  eventId: string;
+  eventTitle: string;
+  previousStartTime: string;
+  previousEndTime: string;
+  newStartTime: string;
+  newEndTime: string;
+  newStatus?: 'planned' | 'confirmed' | 'escalated' | 'cancelled';
+  reason: string;
+}
+
+export interface DownstreamVendorNotice {
+  eventId: string;
+  providerName: string;
+  providerPhone?: string;
+  newStartTime: string;
+  whatsappMessage: string;
+}
+
+export interface OrchestrationDecision {
+  delayMinutes: number;
+  incidentType: 'delay' | 'emergency' | 'reschedule' | 'cancellation' | 'general';
+  isCascadeImpact: boolean;
+  incidentSummary: string;
+  scheduleAdjustments: ScheduleAdjustment[];
+  downstreamNotices: DownstreamVendorNotice[];
+}
+
+export interface OrchestrationExecutionResult {
+  success: boolean;
+  decision?: OrchestrationDecision;
+  updatedEventsCount: number;
+  dispatchedNoticesCount: number;
+  incidentSummary?: string;
   error?: string;
 }
 

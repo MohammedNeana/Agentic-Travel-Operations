@@ -71,9 +71,14 @@ export function resolveRecipientPhone(providerPhone?: string | null): { phone: s
  * Supports interactive confirmation buttons (linking to accept_booking_{id}),
  * text messages, and automated fallbacks.
  */
-export async function sendProviderNotification(
+/**
+ * Sends a natural human-like text message directly to a WhatsApp recipient
+ * via Meta Graph API v17.0.
+ * Used for dynamic LLM clarifications, follow-ups, and natural chat continuity.
+ */
+export async function sendWhatsAppTextMessage(
   providerPhone: string,
-  eventDetails: ProviderNotificationDetails
+  messageText: string
 ): Promise<OutboundNotificationResult> {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -110,14 +115,12 @@ export async function sendProviderNotification(
     );
   }
 
-  const messageText = formatBookingNotificationText(eventDetails);
   const endpoint = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`;
 
   console.log(
-    `[WhatsApp Outbound] 📤 Initiating natural human-like booking notification to ${recipientPhone} for "${eventDetails.title}"...`
+    `[WhatsApp Outbound] 📤 Dispatching natural human-like message to ${recipientPhone}...`
   );
 
-  // Send natural human-like text message directly (no bot buttons)
   try {
     const textPayload = {
       messaging_product: 'whatsapp',
@@ -163,7 +166,6 @@ export async function sendProviderNotification(
         '[WhatsApp Outbound] ⚠️ Recipient outside 24-hour customer service window (code 131047). Attempting hello_world template fallback...'
       );
 
-      // Strategy C: Template fallback (allowed outside 24h window)
       const templatePayload = {
         messaging_product: 'whatsapp',
         recipient_type: 'individual',
@@ -215,4 +217,15 @@ export async function sendProviderNotification(
       error: message,
     };
   }
+}
+
+/**
+ * Sends an outbound WhatsApp booking notification to an experience provider.
+ */
+export async function sendProviderNotification(
+  providerPhone: string,
+  eventDetails: ProviderNotificationDetails
+): Promise<OutboundNotificationResult> {
+  const messageText = formatBookingNotificationText(eventDetails);
+  return sendWhatsAppTextMessage(providerPhone, messageText);
 }
