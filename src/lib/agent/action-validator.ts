@@ -112,6 +112,10 @@ export function validateOrchestrationDecision(
       continue;
     }
 
+    if (context.targetEventDate && known.date && known.date !== context.targetEventDate) {
+      violations.push(`Cross-Day Cascade Violation: Event "${known.title}" (${adj.eventId}) date is ${known.date}, which does not match target operational day ${context.targetEventDate}.`);
+    }
+
     if (known.isImmutable) {
       violations.push(`Safety Constraint Violation: Event "${known.title}" (${adj.eventId}) is designated immutable and cannot be automatically rescheduled.`);
     }

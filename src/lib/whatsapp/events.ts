@@ -8,6 +8,7 @@ export interface EventUpdateResult {
   newStatus?: string;
   title?: string;
   error?: string;
+  requiresHumanEscalation?: boolean;
 }
 
 export async function confirmItineraryEvent(eventId: string): Promise<EventUpdateResult> {
@@ -164,13 +165,21 @@ export async function escalateItineraryEvent(options?: {
         }
       }
 
-      if (bestScore > 0) {
+      if (bestScore > 0 && bestEvent) {
         targetEventId = bestEvent.id;
       } else {
-        targetEventId = allActiveEvents[0].id;
+        return {
+          success: false,
+          error: 'No active event matches the transcription keywords with sufficient confidence.',
+          requiresHumanEscalation: true,
+        };
       }
     } else {
-      targetEventId = allActiveEvents[0].id;
+      return {
+        success: false,
+        error: 'No event ID or transcription text provided for targeted escalation.',
+        requiresHumanEscalation: true,
+      };
     }
   }
 
@@ -332,17 +341,6 @@ export async function getProviderCandidateEvents(options: {
   }
 
   let { data: eventsData } = await eventsQuery;
-
-  if (!eventsData || eventsData.length === 0) {
-    const { data: fallbackEvents } = await supabase
-      .from('itinerary_events')
-      .select('id, title, description, event_date, start_time, end_time, status, sort_order, experience_provider_id, itinerary_id')
-      .neq('status', 'cancelled')
-      .order('event_date', { ascending: true })
-      .order('start_time', { ascending: true })
-      .limit(10);
-    eventsData = fallbackEvents;
-  }
 
   if (!eventsData || eventsData.length === 0) {
     return [];

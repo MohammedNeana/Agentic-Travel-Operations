@@ -36,7 +36,7 @@ export async function orchestrateItineraryCascade(options: {
     .from('itinerary_events')
     .select('id, itinerary_id, event_date, start_time, end_time, title, status, sort_order, experience_provider_id, escalation_reason')
     .eq('itinerary_id', targetEvent.itinerary_id)
-    .order('event_date', { ascending: true })
+    .eq('event_date', targetEvent.event_date)
     .order('start_time', { ascending: true });
 
   if (allEventsErr || !allEvents || allEvents.length === 0) {
@@ -364,6 +364,7 @@ function fallbackOrchestrationDecision(params: {
     order: number;
     eventId: string;
     title: string;
+    date?: string;
     startTime: string;
     endTime: string;
     status: string;
@@ -420,6 +421,9 @@ function fallbackOrchestrationDecision(params: {
 
   for (let i = targetIdx + 1; i < allEvents.length; i++) {
     const nextEv = allEvents[i];
+    if (nextEv.date && currentTarget.date && nextEv.date !== currentTarget.date) {
+      continue;
+    }
     const [prevH, prevM] = prevEndTime.split(':').map((v) => parseInt(v, 10));
     const prevTotal = prevH * 60 + prevM + 30;
 
