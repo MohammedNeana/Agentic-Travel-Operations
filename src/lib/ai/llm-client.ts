@@ -1,13 +1,3 @@
-/**
- * Centralized, multi-provider LLM Client for There DMC.
- *
- * Models hierarchy:
- * 1. Groq: llama-3.3-70b-versatile (Primary flagship, blazing fast sub-second inference)
- * 2. Groq: llama-3.1-8b-instant (Secondary high-throughput backup)
- * 3. OpenAI: gpt-4o-mini (Tertiary cloud fallback)
- * 4. Local LLM: enabled only if LOCAL_LLM_URL is explicitly set in .env.local
- */
-
 export interface LLMRequestOptions {
   systemPrompt: string;
   userPrompt: string;
@@ -40,10 +30,9 @@ export async function callLLMJson<T = unknown>(options: LLMRequestOptions): Prom
 
   const groqApiKey = process.env.GROQ_API_KEY;
   const openaiApiKey = process.env.OPENAI_API_KEY;
-  const localUrl = process.env.LOCAL_LLM_URL; // Only used if explicitly defined
+  const localUrl = process.env.LOCAL_LLM_URL;
   const localModel = process.env.LOCAL_LLM_MODEL || 'llama3.2';
 
-  // Candidate endpoints ordered by priority
   const candidateEndpoints: Array<{
     provider: 'groq' | 'openai' | 'local';
     model: string;
@@ -52,7 +41,6 @@ export async function callLLMJson<T = unknown>(options: LLMRequestOptions): Prom
     isLocal?: boolean;
   }> = [];
 
-  // If the user explicitly configured a local LLM in .env.local, prioritize it
   if (localUrl) {
     candidateEndpoints.push({
       provider: 'local',
@@ -62,7 +50,6 @@ export async function callLLMJson<T = unknown>(options: LLMRequestOptions): Prom
     });
   }
 
-  // Primary: Groq Flagship Llama 3.3 70B
   if (groqApiKey) {
     candidateEndpoints.push(
       {
@@ -80,7 +67,6 @@ export async function callLLMJson<T = unknown>(options: LLMRequestOptions): Prom
     );
   }
 
-  // Fallback: OpenAI GPT-4o-mini
   if (openaiApiKey) {
     candidateEndpoints.push({
       provider: 'openai',
@@ -94,10 +80,6 @@ export async function callLLMJson<T = unknown>(options: LLMRequestOptions): Prom
 
   for (const target of candidateEndpoints) {
     try {
-      console.log(
-        `[LLM Client] 🤖 Dispatching request to ${target.provider.toUpperCase()} (${target.model})...`
-      );
-
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
@@ -121,10 +103,7 @@ export async function callLLMJson<T = unknown>(options: LLMRequestOptions): Prom
 
       if (!res.ok) {
         const errText = await res.text();
-        console.warn(
-          `[LLM Client] ⚠️ ${target.provider} (${target.model}) returned HTTP ${res.status}: ${errText.slice(0, 180)}`
-        );
-        lastError = new Error(`${target.provider} (${target.model}) HTTP ${res.status}`);
+        lastError = new Error(`${target.provider} (${target.model}) HTTP ${res.status}: ${errText.slice(0, 180)}`);
         continue;
       }
 
@@ -139,10 +118,6 @@ export async function callLLMJson<T = unknown>(options: LLMRequestOptions): Prom
       const cleaned = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
       const parsed = JSON.parse(cleaned) as T;
 
-      console.log(
-        `[LLM Client] ⚡ Instant response received from ${target.provider.toUpperCase()} (${target.model})`
-      );
-
       return {
         data: parsed,
         rawText: cleaned,
@@ -150,7 +125,6 @@ export async function callLLMJson<T = unknown>(options: LLMRequestOptions): Prom
         provider: target.provider,
       };
     } catch (err) {
-      console.error(`[LLM Client] ❌ Error with ${target.provider} (${target.model}):`, err);
       lastError = err instanceof Error ? err : new Error(String(err));
     }
   }

@@ -241,14 +241,8 @@ Open [http://localhost:3000](http://localhost:3000) to access the platform.
 *Senior Software & Agentic AI Systems Engineer*  
 Riyadh, Saudi Arabia  
 - **Email:** [mohammedneana@gmail.com](mailto:mohammedneana@gmail.com)  
-- **LinkedIn:** [linkedin.com/in/mohammedneanaa](https://linkedin.com)  
-- **GitHub:** [github.com/mohammedneana](https://github.com)  
-
-Engineered with hands-on production experience in high-scale Saudi platforms:
-- **Fiddah (Riyadh):** Scaled AI personalization and RAG pipelines (FAISS + PostgreSQL + Redis) on GCP Cloud Run.
-- **Toklah (Riyadh):** Engineered event management and volunteer coordination backends managing real-time schedules under active event conditions.
-- **Bullivant Arabia (NEOM Subcontractor):** Automated geotechnical reporting pipelines on NEOM project sites.
-- **Cerberus:** Architected autonomous multi-agent systems and orchestration dispatchers.
+- **LinkedIn:** [linkedin.com/in/mohammedneanaa](https://www.linkedin.com/in/mohammed-hamdi-b80442145/)  
+- **GitHub:** [github.com/mohammedneana](https://github.com/MohammedNeana)  
 
 ---
 
