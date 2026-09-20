@@ -264,11 +264,14 @@ export async function getSmartMatchRecommendations(
       console.error('Error in match_providers_hybrid RPC:', error);
       // Fall back to direct providers query if RPC encounters an issue
       const providers = await getExperienceProviders();
-      return providers.slice(0, 5).map((p, idx) => ({
-        provider: p,
-        matchScore: 85 - idx * 5,
-        reasons: ['مزود تجارب محلي معتمد', `مناسب لرحلات ${p.city}`],
-      }));
+      return providers
+        .filter((p) => p.verificationStatus === 'verified')
+        .slice(0, 5)
+        .map((p, idx) => ({
+          provider: p,
+          matchScore: 85 - idx * 5,
+          reasons: ['مزود تجارب محلي معتمد', `مناسب لرحلات ${p.city}`],
+        }));
     }
 
     console.log(`\x1b[34m[Itinerary Queries]\x1b[0m 📊 Received ${rows?.length ?? 0} hybrid matched providers from Supabase pgvector.`);
@@ -288,25 +291,27 @@ export async function getSmartMatchRecommendations(
 
     const matched = (rows as DbMatchedRow[]) || [];
 
-    return matched.map((m) => {
-      const provider: ExperienceProvider = {
-        id: m.id,
-        tenantId: m.tenant_id,
-        name: m.name,
-        city: m.city,
-        experienceType: m.experience_type,
-        capacity: m.capacity ?? 10,
-        verificationStatus: m.verification_status,
-        rating: 4.8,
-        priceRange: '$$$',
-      };
+    return matched
+      .filter((m) => m.verification_status === 'verified')
+      .map((m) => {
+        const provider: ExperienceProvider = {
+          id: m.id,
+          tenantId: m.tenant_id,
+          name: m.name,
+          city: m.city,
+          experienceType: m.experience_type,
+          capacity: m.capacity ?? 10,
+          verificationStatus: m.verification_status,
+          rating: 4.8,
+          priceRange: '$$$',
+        };
 
-      return {
-        provider,
-        matchScore: m.match_score,
-        reasons: Array.isArray(m.reasons) ? m.reasons : ['تطابق مع تفضيلات الرحلة'],
-      };
-    });
+        return {
+          provider,
+          matchScore: m.match_score,
+          reasons: Array.isArray(m.reasons) ? m.reasons : ['تطابق مع تفضيلات الرحلة'],
+        };
+      });
   } catch (err) {
     console.error('Failed to get smart match recommendations:', err);
     return [];

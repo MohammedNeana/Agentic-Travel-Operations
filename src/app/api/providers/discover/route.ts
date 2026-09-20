@@ -12,7 +12,7 @@ interface DiscoverRequestBody {
 }
 
 /**
- * Resolves the active tenant ID for insertion, defaulting to the primary DMC organization.
+ * Resolves the active tenant ID for insertion.
  */
 async function resolveTenantId(providedTenantId?: string): Promise<string> {
   if (providedTenantId && providedTenantId.trim().length > 0) {
@@ -29,8 +29,7 @@ async function resolveTenantId(providedTenantId?: string): Promise<string> {
   if (org?.tenant_id) {
     return org.tenant_id;
   }
-
-  // Fallback to default seeded tenant UUID
+  //TODO: DO NO T FALLBACK (IT IS A SECURITY BREACH)
   return 'a1b2c3d4-0001-4000-8000-000000000001';
 }
 
@@ -60,7 +59,7 @@ export async function POST(request: NextRequest) {
     // If a URL is provided, scrape it with cheerio
     if (targetUrl) {
       try {
-        console.log(`[Web Agent] 🌐 Scraping URL: ${targetUrl}`);
+        console.log(`Scraping URL: ${targetUrl}`);
         const scrapeResponse = await fetch(targetUrl, {
           headers: {
             'User-Agent': 'Mozilla/5.0 (compatible; ThereBot/1.0; DMC Discovery Agent)',
@@ -105,7 +104,7 @@ export async function POST(request: NextRequest) {
           for (const p of regexPhones) contactNumbers.add(p);
         }
 
-        // 2. If no phone found on landing page, autonomously discover and crawl the /contact-us subpage
+        // 2. If no phone found on landing page -> discover and crawl the /contact-us subpage
         if (contactNumbers.size === 0) {
           let contactPageUrl: string | null = null;
           $('a').each((_, el) => {
@@ -127,7 +126,7 @@ export async function POST(request: NextRequest) {
           });
 
           if (contactPageUrl && contactPageUrl !== targetUrl) {
-            console.log(`[Web Agent] 📞 Crawling contact subpage: ${contactPageUrl}`);
+            console.log(`Crawling contact subpage: ${contactPageUrl}`);
             try {
               const contactRes = await fetch(contactPageUrl, {
                 headers: {
@@ -159,7 +158,7 @@ export async function POST(request: NextRequest) {
                 }
               }
             } catch (contactErr) {
-              console.warn(`[Web Agent] Contact subpage crawl failed:`, contactErr);
+              console.warn(`Contact subpage crawl failed:`, contactErr);
             }
           }
         }
@@ -176,11 +175,11 @@ export async function POST(request: NextRequest) {
 
         if (contactNumbers.size > 0) {
           const phoneList = Array.from(contactNumbers).join(' | ');
-          console.log(`[Web Agent] 📱 Discovered contact numbers:`, phoneList);
+          console.log(`Discovered contact numbers:`, phoneList);
           scrapedText += `\n\n--- بيانات التواصل وأرقام الهواتف والواتساب المكتشفة ---\nرقم هاتف / واتساب للتواصل: ${phoneList}`;
         }
 
-        console.log(`[Web Agent] ✅ Scraped ${scrapedText.length} chars from ${targetUrl}`);
+        console.log(`Scraped ${scrapedText.length} chars from ${targetUrl}`);
 
         // Combine: scraped text takes priority, append any additional manual text
         textContent = textContent

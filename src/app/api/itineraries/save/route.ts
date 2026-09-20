@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = createServerSupabaseClient();
-    const fallbackTenantId = tenantId || 'a1b2c3d4-0001-4000-8000-000000000001';
+    const fallbackTenantId = tenantId;
 
     // 1. Fetch current existing events in the database for this itinerary
     const { data: existingEvents, error: fetchErr } = await supabase
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
     const newlyAddedEvents = events.filter((ev) => !existingDbIdSet.has(ev.id));
 
 
-    // 2. Delete events that were removed by the user in the UI
+    // 2. Delete events that were removed by the user
     const idsToDelete = currentDbIds.filter((id) => !newEventIds.has(id));
     if (idsToDelete.length > 0) {
       const { error: deleteErr } = await supabase
@@ -67,14 +67,13 @@ export async function POST(req: NextRequest) {
       if (deleteErr) {
         console.error('Failed to delete removed events:', deleteErr);
       } else {
-        console.log(`[Itinerary Sync] 🗑️ Deleted ${idsToDelete.length} removed events`);
+        console.log(`Deleted ${idsToDelete.length} removed events`);
       }
     }
 
     // 3. Upsert current local events into Supabase
     if (events.length > 0) {
       const rowsToUpsert = events.map((ev, index) => {
-        // Ensure time format HH:MM:SS
         const start = ev.startTime
           ? ev.startTime.length === 5
             ? `${ev.startTime}:00`
@@ -115,7 +114,7 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      console.log(`[Itinerary Sync] 💾 Successfully synced ${rowsToUpsert.length} events for itinerary ${itineraryId}`);
+      console.log(`Successfully synced ${rowsToUpsert.length} events for itinerary ${itineraryId}`);
     }
 
     // 4. Update updated_at timestamp on the itinerary
@@ -136,7 +135,7 @@ export async function POST(req: NextRequest) {
 
     if (newlyAddedEvents.length > 0) {
       console.log(
-        `[Itinerary Save] 🔔 Detected ${newlyAddedEvents.length} newly added events. Triggering provider notifications...`
+        `Detected ${newlyAddedEvents.length} newly added events. Triggering provider notifications...`
       );
 
       for (const ev of newlyAddedEvents) {

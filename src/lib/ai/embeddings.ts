@@ -21,7 +21,7 @@ async function getExtractor(): Promise<FeatureExtractor> {
   }
 
   extractorPromise = (async () => {
-    console.log('\x1b[36m[Local AI]\x1b[0m 🚀 Loading @xenova/transformers pipeline (Xenova/all-MiniLM-L6-v2)...');
+    console.log('\x1b[36m\x1b[0m Loading @xenova/transformers pipeline (Xenova/all-MiniLM-L6-v2)...');
     const startTime = Date.now();
 
     const { pipeline, env } = await import('@xenova/transformers');

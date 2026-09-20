@@ -30,12 +30,12 @@ async function resolveTenantId(providedTenantId?: string): Promise<string> {
     return org.tenant_id;
   }
 
-  return 'a1b2c3d4-0001-4000-8000-000000000001';
+  return 'a1b2c3d4-0001-4000-8000-000000000001'; //TODO: NO FALBACK
 }
 
 /**
  * Executes a broad web search using DuckDuckGo HTML parsing via cheerio
- * to retrieve top external candidate URLs without requiring paid API keys.
+ * to retrieve top external candidate URLs.
  */
 async function searchWeb(query: string, maxResults = 3): Promise<string[]> {
   const urls: string[] = [];
@@ -43,7 +43,7 @@ async function searchWeb(query: string, maxResults = 3): Promise<string[]> {
   try {
     const cheerio = await import('cheerio');
     const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
-    console.log(`[Auto-Search Agent] 🌐 Autonomous web search query: "${query}"`);
+    console.log(`web search query: "${query}"`);
 
     const response = await fetch(searchUrl, {
       headers: {
@@ -80,7 +80,7 @@ async function searchWeb(query: string, maxResults = 3): Promise<string[]> {
       });
     }
   } catch (err) {
-    console.warn('[Auto-Search Agent] Web HTML search encountered an error:', err);
+    console.warn('Web HTML search encountered an error:', err);
   }
 
   return urls.slice(0, maxResults);
@@ -158,7 +158,7 @@ async function extractPhoneFromWebsite(websiteUrl: string): Promise<string | nul
       if (/(?:contact|contact-us|اتصل|تواصل)/i.test(href)) {
         try {
           contactSubUrl = new URL(href, websiteUrl).href;
-        } catch {}
+        } catch { }
       }
     });
 
@@ -245,11 +245,11 @@ async function resolveProviderOfficialContact(
         if (matchesName && !candidateUrls.includes(href)) {
           candidateUrls.push(href);
         }
-      } catch {}
+      } catch { }
     });
 
     for (const officialUrl of candidateUrls.slice(0, 2)) {
-      console.log(`[Auto-Search Agent] 🌐 Found official provider link from article: ${officialUrl}`);
+      console.log(`Found official provider link from article: ${officialUrl}`);
       const phone = await extractPhoneFromWebsite(officialUrl);
       if (phone) return phone;
     }
@@ -258,16 +258,16 @@ async function resolveProviderOfficialContact(
   // Strategy 2: Autonomous targeted search for the provider's direct website & WhatsApp
   try {
     const targetedQuery = `"${providerName}" ${city} واتساب هاتف موقع`;
-    console.log(`[Auto-Search Agent] 🔍 Autonomous targeted search: "${targetedQuery}"`);
+    console.log(`targeted search: "${targetedQuery}"`);
     const directUrls = await searchWeb(targetedQuery, 2);
 
     for (const directUrl of directUrls) {
-      console.log(`[Auto-Search Agent] 📞 Inspecting targeted website for WhatsApp/phone: ${directUrl}`);
+      console.log(`Inspecting targeted website for WhatsApp/phone: ${directUrl}`);
       const phone = await extractPhoneFromWebsite(directUrl);
       if (phone) return phone;
     }
   } catch (err) {
-    console.warn(`[Auto-Search Agent] Targeted search error for ${providerName}:`, err);
+    console.warn(`Targeted search error for ${providerName}:`, err);
   }
 
   return null;
@@ -280,7 +280,7 @@ async function scrapeUrlText(
   url: string
 ): Promise<{ text: string; rawHtml: string; contactPhones: string[] } | null> {
   try {
-    console.log(`[Auto-Search Agent] 📄 Scraping content from: ${url}`);
+    console.log(`Scraping content from: ${url}`);
     const response = await fetch(url, {
       headers: {
         'User-Agent':
@@ -292,7 +292,7 @@ async function scrapeUrlText(
     });
 
     if (!response.ok) {
-      console.warn(`[Auto-Search Agent] HTTP ${response.status} fetching ${url}`);
+      console.warn(`HTTP ${response.status} fetching ${url}`);
       return null;
     }
 
@@ -334,12 +334,12 @@ async function scrapeUrlText(
         ) {
           try {
             contactPageUrl = new URL(href, url).href;
-          } catch {}
+          } catch { }
         }
       });
 
       if (contactPageUrl && contactPageUrl !== url) {
-        console.log(`[Auto-Search Agent] 📞 Crawling contact subpage: ${contactPageUrl}`);
+        console.log(`Crawling contact subpage: ${contactPageUrl}`);
         try {
           const contactRes = await fetch(contactPageUrl, {
             headers: {
@@ -370,7 +370,7 @@ async function scrapeUrlText(
             }
           }
         } catch (contactErr) {
-          console.warn(`[Auto-Search Agent] Contact subpage crawl failed for ${contactPageUrl}:`, contactErr);
+          console.warn(`Contact subpage crawl failed for ${contactPageUrl}:`, contactErr);
         }
       }
     }
@@ -387,7 +387,7 @@ async function scrapeUrlText(
 
     const contactPhoneList = Array.from(contactNumbers);
     if (contactPhoneList.length > 0) {
-      console.log(`[Auto-Search Agent] 📱 Discovered contact numbers for ${url}:`, contactPhoneList.join(' | '));
+      console.log(`Discovered contact numbers for ${url}:`, contactPhoneList.join(' | '));
       text += `\n\n--- بيانات التواصل وأرقام الهواتف والواتساب المكتشفة ---\nرقم هاتف / واتساب للتواصل: ${contactPhoneList.join(' | ')}`;
     }
 
@@ -399,15 +399,16 @@ async function scrapeUrlText(
       contactPhones: contactPhoneList,
     };
   } catch (err) {
-    console.warn(`[Auto-Search Agent] Failed scraping ${url}:`, err);
+    console.warn(`Failed scraping ${url}:`, err);
     return null;
   }
 }
 
+
+//TODO: NEED TO TAKE THE natural language query and pass to the AI model to provide the system with the correct query
 /**
  * POST /api/providers/auto-search
  *
- * Fully autonomous AI Sourcing loop:
  * 1. Takes a natural language query (e.g. "Find stargazing camps in AlUla")
  * 2. Searches the web for top candidate URLs
  * 3. Scrapes readable text from each URL using cheerio
@@ -441,7 +442,7 @@ export async function POST(request: NextRequest) {
     const maxResults = Math.min(Math.max(body.max_results || 3, 1), 5);
     const tenantId = await resolveTenantId(body.tenant_id);
 
-    console.log(`[Auto-Search Agent] 🚀 Initiating autonomous loop for: "${query}" (Tenant: ${tenantId})`);
+    console.log(`loop for: "${query}" (Tenant: ${tenantId})`);
 
     // Step 1: Broad Web Search
     const targetUrls = await searchWeb(query, maxResults);
@@ -458,7 +459,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`[Auto-Search Agent] 🎯 Found ${targetUrls.length} candidate URLs:`, targetUrls);
+    console.log(`Found ${targetUrls.length} candidate URLs:`, targetUrls);
 
     // Step 2, 3, 4: Scrape -> Groq Extraction -> Local Xenova Embedding
     const discoveredProviders: Array<any> = [];
@@ -472,25 +473,25 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        console.log(`[Auto-Search Agent] 🧠 Extracting provider from ${url} (${scraped.text.length} chars)`);
+        console.log(`Extracting provider from ${url} (${scraped.text.length} chars)`);
         const extracted = await extractExperienceProvider(scraped.text);
 
         // Targeted Official Website & WhatsApp Resolution:
         if (!extracted.phone_number) {
           if (scraped.contactPhones.length > 0) {
             extracted.phone_number = formatSaudiPhone(scraped.contactPhones[0]);
-            console.log(`[Auto-Search Agent] 📱 Applied discovered phone for "${extracted.name}":`, extracted.phone_number);
+            console.log(`discovered phone for "${extracted.name}":`, extracted.phone_number);
           } else {
-            console.log(`[Auto-Search Agent] 🔎 Phone missing for "${extracted.name}". Inspecting official website / WhatsApp...`);
+            console.log(`Phone missing for "${extracted.name}". Inspecting official website / WhatsApp...`);
             const resolvedPhone = await resolveProviderOfficialContact(extracted.name, extracted.city, scraped.rawHtml);
             if (resolvedPhone) {
               extracted.phone_number = resolvedPhone;
-              console.log(`[Auto-Search Agent] 🎯 Successfully resolved official phone for "${extracted.name}":`, resolvedPhone);
+              console.log(`Successfully resolved official phone for "${extracted.name}":`, resolvedPhone);
             }
           }
         }
 
-        console.log(`[Auto-Search Agent] ⚡ Generating 384d local embedding for: ${extracted.name}`);
+        console.log(`Generating 384d local embedding for: ${extracted.name}`);
         const embedding = await generateProviderEmbedding(extracted);
 
         discoveredProviders.push({
@@ -516,7 +517,7 @@ export async function POST(request: NextRequest) {
         await new Promise((resolve) => setTimeout(resolve, 1200));
       } catch (loopError) {
         const errorMsg = loopError instanceof Error ? loopError.message : String(loopError);
-        console.warn(`[Auto-Search Agent] Failed extracting from ${url}:`, errorMsg);
+        console.warn(`Failed extracting from ${url}:`, errorMsg);
         executionLogs.push({ url, status: 'failed', reason: errorMsg });
       }
     }
@@ -544,7 +545,7 @@ export async function POST(request: NextRequest) {
       .select('id, tenant_id, name, city, experience_type, capacity, verification_status, phone_number, created_at');
 
     if (insertError) {
-      console.error('[Auto-Search Agent] Supabase insertion error:', insertError);
+      console.error('Supabase insertion error:', insertError);
       return NextResponse.json(
         {
           success: false,
@@ -556,7 +557,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`[Auto-Search Agent] 🎉 Successfully saved ${insertedRecords?.length || 0} new providers!`);
+    console.log(`Successfully saved ${insertedRecords?.length || 0} new providers!`);
 
     return NextResponse.json(
       {
@@ -570,7 +571,7 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
-    console.error('[Auto-Search Agent] Unexpected server error:', error);
+    console.error('Unexpected server error:', error);
     return NextResponse.json(
       {
         success: false,

@@ -1,6 +1,20 @@
 'use client';
 
-import { Clock, MapPin, CheckCircle2, Circle, XCircle, AlertTriangle, Trash2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import {
+  Clock,
+  MapPin,
+  CheckCircle2,
+  Circle,
+  XCircle,
+  AlertTriangle,
+  Trash2,
+  GripVertical,
+  Pencil,
+  Check,
+  X,
+  Calendar,
+} from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
 import ar from '@/lib/i18n/ar';
@@ -11,6 +25,13 @@ interface TimelineViewProps {
   events: ItineraryEvent[];
   isLoading?: boolean;
   onRemoveEvent?: (eventId: string) => void;
+  onReorderEvents?: (sourceEventId: string, targetEventId: string) => void;
+  onUpdateEventTime?: (
+    eventId: string,
+    startTime: string,
+    endTime: string,
+    eventDate?: string
+  ) => void;
 }
 
 const statusConfig: Record<string, { icon: typeof CheckCircle2; variant: 'success' | 'warning' | 'danger' }> = {
@@ -24,7 +45,12 @@ export function TimelineView({
   events,
   isLoading = false,
   onRemoveEvent,
+  onReorderEvents,
+  onUpdateEventTime,
 }: TimelineViewProps) {
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+
   if (isLoading) {
     return <TimelineSkeleton />;
   }
@@ -47,7 +73,12 @@ export function TimelineView({
   return (
     <div className="flex-1 space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-gray-900">{ar.timeline.title}</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-bold text-gray-900">{ar.timeline.title}</h2>
+          <span className="text-[11px] font-semibold text-violet-700 bg-violet-50 px-2 py-0.5 rounded-full border border-violet-200">
+            يدعم السحب والإفلات وتعديل المواعيد ⏱️
+          </span>
+        </div>
         <span className="text-xs text-gray-400 font-medium">
           {events.length} {ar.timeline.events}
         </span>
@@ -76,7 +107,29 @@ export function TimelineView({
               <EventCard
                 key={event.id}
                 event={event}
+                isDragging={draggedId === event.id}
+                isDragOver={dragOverId === event.id}
+                onDragStart={() => setDraggedId(event.id)}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (dragOverId !== event.id) setDragOverId(event.id);
+                }}
+                onDragLeave={() => {
+                  if (dragOverId === event.id) setDragOverId(null);
+                }}
+                onDrop={() => {
+                  if (draggedId && draggedId !== event.id) {
+                    onReorderEvents?.(draggedId, event.id);
+                  }
+                  setDraggedId(null);
+                  setDragOverId(null);
+                }}
+                onDragEnd={() => {
+                  setDraggedId(null);
+                  setDragOverId(null);
+                }}
                 onRemove={onRemoveEvent ? () => onRemoveEvent(event.id) : undefined}
+                onUpdateEventTime={onUpdateEventTime}
               />
             ))}
           </div>
@@ -90,16 +143,76 @@ export function TimelineView({
 
 function EventCard({
   event,
+  isDragging = false,
+  isDragOver = false,
+  onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onDragEnd,
   onRemove,
+  onUpdateEventTime,
 }: {
   event: ItineraryEvent;
+  isDragging?: boolean;
+  isDragOver?: boolean;
+  onDragStart?: () => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDragLeave?: () => void;
+  onDrop?: () => void;
+  onDragEnd?: () => void;
   onRemove?: () => void;
+  onUpdateEventTime?: (
+    eventId: string,
+    startTime: string,
+    endTime: string,
+    eventDate?: string
+  ) => void;
 }) {
+  const [isEditingTime, setIsEditingTime] = useState(false);
+  const [startTime, setStartTime] = useState(event.startTime);
+  const [endTime, setEndTime] = useState(event.endTime);
+  const [eventDate, setEventDate] = useState(event.eventDate);
+
+  useEffect(() => {
+    setStartTime(event.startTime);
+    setEndTime(event.endTime);
+    setEventDate(event.eventDate);
+  }, [event.startTime, event.endTime, event.eventDate]);
+
   const config = statusConfig[event.status] ?? statusConfig.planned;
   const StatusIcon = config.icon;
 
+  const handleSaveTime = () => {
+    if (startTime && endTime) {
+      onUpdateEventTime?.(event.id, startTime, endTime, eventDate);
+    }
+    setIsEditingTime(false);
+  };
+
+  const handleCancelTime = () => {
+    setStartTime(event.startTime);
+    setEndTime(event.endTime);
+    setEventDate(event.eventDate);
+    setIsEditingTime(false);
+  };
+
   return (
-    <div className="group relative rounded-xl border border-gray-100 bg-white p-4.5 transition-all hover:border-gray-200 hover:shadow-md">
+    <div
+      draggable={!isEditingTime}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
+      className={`group relative rounded-xl border bg-white p-4.5 transition-all select-none ${
+        isDragging
+          ? 'opacity-40 border-dashed border-violet-400 shadow-none scale-[0.98]'
+          : isDragOver
+            ? 'border-violet-500 ring-2 ring-violet-400/50 bg-violet-50/20 shadow-md scale-[1.01]'
+            : 'border-gray-100 hover:border-gray-200 hover:shadow-md'
+      }`}
+    >
       {/* Timeline dot */}
       <div className="absolute -start-[15px] top-5 flex h-[18px] w-[18px] items-center justify-center rounded-full border-2 border-white bg-gray-900 shadow-xs">
         <div className="h-1.5 w-1.5 rounded-full bg-white" />
@@ -108,6 +221,14 @@ function EventCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
+            {/* Drag Handle Grip Icon */}
+            <div
+              className="cursor-grab active:cursor-grabbing p-0.5 -ms-1 text-gray-300 hover:text-gray-600 rounded transition-colors"
+              title="اسحب الفعالية لتبديل موعدها وترتيبها مع فعالية أخرى"
+            >
+              <GripVertical className="h-4 w-4" />
+            </div>
+
             <h3 className="text-sm font-bold text-gray-900 truncate">{event.title}</h3>
             <Badge
               label={ar.status[event.status] ?? event.status}
@@ -122,13 +243,76 @@ function EventCard({
             </p>
           )}
 
-          <div className="mt-3 flex items-center gap-4 text-xs text-gray-400">
-            <span className="flex items-center gap-1.5">
-              <Clock className="h-3.5 w-3.5 text-gray-400" />
-              <span>
-                {event.startTime} – {event.endTime}
-              </span>
-            </span>
+          {/* Time & Location Controls */}
+          <div className="mt-3 flex items-center gap-3 text-xs text-gray-400 flex-wrap">
+            {isEditingTime ? (
+              <div
+                className="flex items-center gap-2 flex-wrap bg-violet-50/80 p-1.5 rounded-lg border border-violet-200"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center gap-1">
+                  <Clock className="h-3.5 w-3.5 text-violet-600 shrink-0" />
+                  <input
+                    type="time"
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    className="rounded border border-gray-200 bg-white px-1.5 py-0.5 text-xs font-mono text-gray-800 focus:border-violet-600 focus:outline-none"
+                    title="وقت البدء"
+                  />
+                  <span className="text-gray-400 text-xs font-bold">–</span>
+                  <input
+                    type="time"
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                    className="rounded border border-gray-200 bg-white px-1.5 py-0.5 text-xs font-mono text-gray-800 focus:border-violet-600 focus:outline-none"
+                    title="وقت الانتهاء"
+                  />
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <Calendar className="h-3.5 w-3.5 text-violet-600 shrink-0" />
+                  <input
+                    type="date"
+                    value={eventDate}
+                    onChange={(e) => setEventDate(e.target.value)}
+                    className="rounded border border-gray-200 bg-white px-1.5 py-0.5 text-xs font-mono text-gray-800 focus:border-violet-600 focus:outline-none"
+                    title="تاريخ الفعالية"
+                  />
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={handleSaveTime}
+                    className="flex items-center gap-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-0.5 text-xs font-bold transition-colors cursor-pointer"
+                    title="حفظ الوقت والتاريخ"
+                  >
+                    <Check className="h-3 w-3" />
+                    <span>حفظ</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCancelTime}
+                    className="rounded p-1 text-gray-500 hover:bg-gray-200 transition-colors cursor-pointer"
+                    title="إلغاء"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsEditingTime(true)}
+                className="group/time inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 bg-gray-50 hover:bg-violet-50 hover:text-violet-700 border border-transparent hover:border-violet-200 transition-all cursor-pointer text-xs text-gray-500 font-medium"
+                title="انقر لتعديل الوقت والتاريخ بالساعات والدقائق"
+              >
+                <Clock className="h-3.5 w-3.5 text-gray-400 group-hover/time:text-violet-600" />
+                <span className="font-mono">{event.startTime} – {event.endTime}</span>
+                <Pencil className="h-2.5 w-2.5 opacity-0 group-hover/time:opacity-100 text-violet-500 transition-opacity" />
+              </button>
+            )}
+
             {event.provider && (
               <span className="flex items-center gap-1.5">
                 <MapPin className="h-3.5 w-3.5 text-gray-400" />

@@ -166,12 +166,35 @@ export function SmartItineraryBuilder({
     }
   };
 
-  // Add event from Smart Match recommendations to timeline
+  // Add event from Smart Match recommendations to timeline with smart non-conflicting time slotting
   const handleAddEvent = (provider: ExperienceProvider) => {
     const lastEvent = itineraryEvents[itineraryEvents.length - 1];
     const eventDate = lastEvent?.eventDate || itinerary?.startDate || profile?.arrivalDate || '2026-10-18';
-    const eventsOnDate = itineraryEvents.filter((e) => e.eventDate === eventDate);
-    const sortOrder = eventsOnDate.length + 1;
+    const dayEvents = itineraryEvents.filter((e) => e.eventDate === eventDate);
+    const sortOrder = dayEvents.length + 1;
+
+    // Smart automatic slotting: find latest endTime on this day and add next slot with buffer
+    let smartStart = '09:00';
+    let smartEnd = '12:00';
+
+    if (dayEvents.length > 0) {
+      const sortedByEnd = [...dayEvents].sort((a, b) => b.endTime.localeCompare(a.endTime));
+      const latestEnd = sortedByEnd[0].endTime; // e.g. "13:00"
+      const [hStr, mStr] = latestEnd.split(':');
+      const latestH = parseInt(hStr, 10) || 12;
+      const latestM = mStr || '00';
+
+      const nextStartH = latestH + 1; // 1-hour transit / buffer
+      const nextEndH = nextStartH + 3; // 3-hour duration
+
+      if (nextEndH <= 22) {
+        smartStart = `${String(nextStartH).padStart(2, '0')}:${latestM}`;
+        smartEnd = `${String(nextEndH).padStart(2, '0')}:${latestM}`;
+      } else {
+        smartStart = '19:00';
+        smartEnd = '22:00';
+      }
+    }
 
     const newEvent: ItineraryEvent = {
       id: crypto.randomUUID(),
@@ -181,16 +204,97 @@ export function SmartItineraryBuilder({
       title: provider.name,
       description: `تجربة ${provider.experienceType} مميزة في ${provider.city} مع مزود محلي معتمد.`,
       eventDate,
-      startTime: '10:00',
-      endTime: '13:00',
+      startTime: smartStart,
+      endTime: smartEnd,
       sortOrder,
       status: 'planned',
       provider,
     };
 
     const updated = [...itineraryEvents, newEvent];
+    updated.sort((a, b) => {
+      const dateCmp = a.eventDate.localeCompare(b.eventDate);
+      if (dateCmp !== 0) return dateCmp;
+      return a.startTime.localeCompare(b.startTime);
+    });
+
     setItineraryEvents(updated);
     setWarnings(detectScheduleWarnings(updated, profile));
+    setHasUnsavedChanges(true);
+    setSaveSuccess(false);
+  };
+
+  // Swap / Reorder events via Drag and Drop (swapping time slots and positions)
+  const handleReorderEvents = (sourceId: string, targetId: string) => {
+    if (sourceId === targetId) return;
+
+    const sourceIdx = itineraryEvents.findIndex((e) => e.id === sourceId);
+    const targetIdx = itineraryEvents.findIndex((e) => e.id === targetId);
+    if (sourceIdx === -1 || targetIdx === -1) return;
+
+    const sourceEvent = itineraryEvents[sourceIdx];
+    const targetEvent = itineraryEvents[targetIdx];
+
+    // Swap time slots and dates between source and target
+    const updatedSource: ItineraryEvent = {
+      ...sourceEvent,
+      eventDate: targetEvent.eventDate,
+      startTime: targetEvent.startTime,
+      endTime: targetEvent.endTime,
+      sortOrder: targetEvent.sortOrder,
+    };
+
+    const updatedTarget: ItineraryEvent = {
+      ...targetEvent,
+      eventDate: sourceEvent.eventDate,
+      startTime: sourceEvent.startTime,
+      endTime: sourceEvent.endTime,
+      sortOrder: sourceEvent.sortOrder,
+    };
+
+    const newEvents = [...itineraryEvents];
+    newEvents[sourceIdx] = updatedSource;
+    newEvents[targetIdx] = updatedTarget;
+
+    // Sort by date then startTime
+    newEvents.sort((a, b) => {
+      const dateCmp = a.eventDate.localeCompare(b.eventDate);
+      if (dateCmp !== 0) return dateCmp;
+      return a.startTime.localeCompare(b.startTime);
+    });
+
+    setItineraryEvents(newEvents);
+    setWarnings(detectScheduleWarnings(newEvents, profile));
+    setHasUnsavedChanges(true);
+    setSaveSuccess(false);
+  };
+
+  // Manually update specific event hours and date
+  const handleUpdateEventTime = (
+    eventId: string,
+    startTime: string,
+    endTime: string,
+    eventDate?: string
+  ) => {
+    const newEvents = itineraryEvents.map((ev) => {
+      if (ev.id !== eventId) return ev;
+      return {
+        ...ev,
+        startTime,
+        endTime,
+        eventDate: eventDate || ev.eventDate,
+      };
+    });
+
+    // Sort by date then startTime
+    newEvents.sort((a, b) => {
+      const dateCmp = a.eventDate.localeCompare(b.eventDate);
+      if (dateCmp !== 0) return dateCmp;
+      return a.startTime.localeCompare(b.startTime);
+    });
+
+    setItineraryEvents(newEvents);
+    setWarnings(detectScheduleWarnings(newEvents, profile));
     setHasUnsavedChanges(true);
     setSaveSuccess(false);
   };
@@ -339,6 +443,8 @@ export function SmartItineraryBuilder({
           events={itineraryEvents}
           isLoading={isLoading || isLoadingItinerary}
           onRemoveEvent={handleRemoveEvent}
+          onReorderEvents={handleReorderEvents}
+          onUpdateEventTime={handleUpdateEventTime}
         />
         <SmartMatchPanel
           recommendations={recommendations}

@@ -125,8 +125,8 @@ export default function LoginPage() {
               setErrorMsg(null);
             }}
             className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${!isRegister
-                ? 'bg-white text-gray-900 shadow-xs'
-                : 'text-gray-500 hover:text-gray-800'
+              ? 'bg-white text-gray-900 shadow-xs'
+              : 'text-gray-500 hover:text-gray-800'
               }`}
           >
             تسجيل الدخول
@@ -138,8 +138,8 @@ export default function LoginPage() {
               setErrorMsg(null);
             }}
             className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${isRegister
-                ? 'bg-white text-gray-900 shadow-xs'
-                : 'text-gray-500 hover:text-gray-800'
+              ? 'bg-white text-gray-900 shadow-xs'
+              : 'text-gray-500 hover:text-gray-800'
               }`}
           >
             إنشاء حساب جديد
@@ -179,7 +179,7 @@ export default function LoginPage() {
                       required
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
-                      placeholder="مثال: محمد حمدي"
+                      placeholder="الاسم الكامل"
                       className="block w-full rounded-xl border border-gray-200 ps-9 pe-3 py-2 text-xs font-medium focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
                     />
                   </div>

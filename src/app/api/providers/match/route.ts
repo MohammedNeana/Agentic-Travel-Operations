@@ -36,21 +36,25 @@ export async function POST(request: NextRequest) {
       // Empty body is acceptable, fallback to defaults
     }
 
+    //TODO: WHY WE HAVE A FALLBACK interests AND destinations!!!
+
     const interests = Array.isArray(body.interests) ? body.interests : ['تراث وثقافة', 'سفاري صحراوي'];
     const destinations = Array.isArray(body.destinations) ? body.destinations : ['العُلا', 'الرياض'];
+
+    //TODO: DO NOT FALLBACK THE tenant_id IT IS A SECURITY BREACH
     const tenantId = body.tenant_id?.trim() || 'a1b2c3d4-0001-4000-8000-000000000001';
     const limit = typeof body.limit === 'number' ? body.limit : 5;
 
     const supabase = createServerSupabaseClient();
 
-    // Automatically backfill embeddings for any providers that have NULL embeddings
+    //backfill embeddings for any providers that have NULL embeddings
     const { data: unindexedProviders } = await supabase
       .from('experience_providers')
       .select('id, name, city, experience_type, capacity, verification_status')
       .is('embedding', null);
 
     if (unindexedProviders && unindexedProviders.length > 0) {
-      console.log(`\x1b[33m[Smart Match API]\x1b[0m ⚙️ Backfilling 384-d embeddings for ${unindexedProviders.length} unindexed providers...`);
+      console.log(`\x1b[33m\x1b[0m Backfilling 384-d embeddings for ${unindexedProviders.length} unindexed providers...`);
       for (const p of unindexedProviders) {
         const emb = await generateProviderEmbedding({
           name: p.name,
@@ -64,12 +68,12 @@ export async function POST(request: NextRequest) {
           .update({ embedding: JSON.stringify(emb) })
           .eq('id', p.id);
       }
-      console.log(`\x1b[32m[Smart Match API]\x1b[0m ✅ Backfill complete for all providers.`);
+      console.log(`\x1b[32m\x1b[0m Backfill complete for all providers.`);
     }
 
     // Compose semantic query text representing traveler's requirements
     const queryText = `اهتمامات الزائر: ${interests.join('، ')} | الوجهات السياحية المطلوبة: ${destinations.join('، ')}`;
-    console.log(`\x1b[35m[Smart Match API]\x1b[0m 🎯 Matching for: [${interests.join(', ')}] | tenant: ${tenantId}`);
+    console.log(`\x1b[35m\x1b[0m Matching for: [${interests.join(', ')}] | tenant: ${tenantId}`);
 
     // 1. Generate 384-dimensional vector embedding for traveler preferences
     const queryEmbedding = await generateTextEmbedding(queryText);
@@ -93,17 +97,22 @@ export async function POST(request: NextRequest) {
 
     const rows = (matchedRows as DbMatchedProvider[]) || [];
 
-    // 3. Map to strictly typed SmartMatchRecommendation
-    const recommendations: SmartMatchRecommendation[] = rows.map((row) => {
+    // 3. Map to strictly typed SmartMatchRecommendation (verified providers only)
+    const recommendations: SmartMatchRecommendation[] = rows
+      .filter((row) => row.verification_status === 'verified')
+      .map((row) => {
       const provider: ExperienceProvider = {
         id: row.id,
         tenantId: row.tenant_id,
         name: row.name,
         city: row.city,
         experienceType: row.experience_type,
+
+        //TODO: DO NOT FALLBACK THE capacity
         capacity: row.capacity ?? 10,
         verificationStatus: row.verification_status,
         phoneNumber: row.phone_number || undefined,
+        //TODO: WHY THE rating IS STATIC 4.8 ????
         rating: 4.8,
         priceRange: '$$$',
       };
@@ -116,7 +125,7 @@ export async function POST(request: NextRequest) {
     });
 
     console.log(
-      `\x1b[35m[Smart Match API]\x1b[0m ✨ pgvector returned ${recommendations.length} providers (top score: ${recommendations[0]?.matchScore ?? 0}%)`
+      `\x1b[35m \x1b[0m pgvector returned ${recommendations.length} providers (top score: ${recommendations[0]?.matchScore ?? 0}%)`
     );
 
     return NextResponse.json({
@@ -140,21 +149,24 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const interestsParam = searchParams.get('interests');
+    //TODO: DO NOT FALLBACK THE interestsParam
     const interests = interestsParam ? interestsParam.split(',') : ['تراث وثقافة', 'سفاري صحراوي'];
+
+    //TODO: DO NOT FALLBACK THE tenant_id IT IS A SECURITY BREACH
     const tenantId = searchParams.get('tenant_id') || 'a1b2c3d4-0001-4000-8000-000000000001';
 
     const supabase = createServerSupabaseClient();
 
-    // Automatically backfill embeddings for any providers that have NULL embeddings
+    //backfill embeddings for any providers that have NULL embeddings
     const { data: unindexedProviders, error: selectErr } = await supabase
       .from('experience_providers')
       .select('id, name, city, experience_type, capacity, verification_status')
       .is('embedding', null);
 
-    console.log(`[Backfill Debug] Found ${unindexedProviders?.length ?? 0} unindexed providers. Select error:`, selectErr);
+    console.log(`Found ${unindexedProviders?.length ?? 0} unindexed providers. Select error:`, selectErr);
 
     if (unindexedProviders && unindexedProviders.length > 0) {
-      console.log(`\x1b[33m[Smart Match API]\x1b[0m ⚙️ Backfilling 384-d embeddings for ${unindexedProviders.length} unindexed providers...`);
+      console.log(`\x1b[33m \x1b[0m Backfilling 384-d embeddings for ${unindexedProviders.length} unindexed providers...`);
       for (const p of unindexedProviders) {
         const emb = await generateProviderEmbedding({
           name: p.name,
@@ -169,12 +181,12 @@ export async function GET(request: NextRequest) {
           .eq('id', p.id);
 
         if (updateErr) {
-          console.error(`[Backfill Error] Failed to update provider ${p.id}:`, updateErr);
+          console.error(`Failed to update provider ${p.id}:`, updateErr);
         } else {
-          console.log(`[Backfill Success] Updated provider ${p.name}`);
+          console.log(`Updated provider ${p.name}`);
         }
       }
-      console.log(`\x1b[32m[Smart Match API]\x1b[0m ✅ Backfill complete for all providers.`);
+      console.log(`\x1b[32m \x1b[0m Backfill complete for all providers.`);
     }
 
     const queryText = `اهتمامات الزائر: ${interests.join('، ')}`;

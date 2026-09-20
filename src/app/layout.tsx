@@ -27,7 +27,7 @@ export default function RootLayout({
       className={`${ibmArabic.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col font-sans bg-gray-50/40" suppressHydrationWarning>
+      <body className="min-h-full flex flex-col font-sans bg-slate-50 text-slate-900" suppressHydrationWarning>
         <AuthGuard>
           <AppNavbar />
           {children}

@@ -21,6 +21,11 @@ export function SmartMatchPanel({
   onReMatch,
   onAddEvent,
 }: SmartMatchPanelProps) {
+  // Only show approved/verified providers in Smart Match recommendations
+  const verifiedRecommendations = recommendations.filter(
+    (rec) => rec.provider?.verificationStatus === 'verified'
+  );
+
   return (
     <div className="w-80 shrink-0 space-y-4">
       {/* Header */}
@@ -55,9 +60,16 @@ export function SmartMatchPanel({
             <SkeletonCard key={i} />
           ))}
         </div>
+      ) : verifiedRecommendations.length === 0 ? (
+        <div className="rounded-xl border border-gray-100 bg-white p-6 text-center text-xs text-gray-500">
+          <p className="font-semibold text-gray-700">لا توجد توصيات لمزودين معتمدين</p>
+          <p className="mt-1 text-[11px] text-gray-400">
+            تأكد من اعتماد مزودي التجارب في «دليل المزودين» لتظهر هنا.
+          </p>
+        </div>
       ) : (
         <div className="space-y-3">
-          {recommendations.map((rec, index) => (
+          {verifiedRecommendations.map((rec, index) => (
             <RecommendationCard
               key={rec.provider.id}
               recommendation={rec}
