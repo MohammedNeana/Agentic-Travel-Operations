@@ -76,4 +76,15 @@ describe('WhatsApp Webhook Idempotency Layer', () => {
     expect(retryLock.acquired).toBe(true);
     expect(retryLock.state).toBe('processing');
   });
+
+  it('guarantees mutual exclusion under concurrent lock acquisitions', async () => {
+    const msgId = 'wamid_concurrent_race';
+    const results = await Promise.all([
+      acquireMessageProcessingLock(msgId),
+      acquireMessageProcessingLock(msgId),
+      acquireMessageProcessingLock(msgId),
+    ]);
+    const acquiredCount = results.filter((r) => r.acquired).length;
+    expect(acquiredCount).toBe(1);
+  });
 });
