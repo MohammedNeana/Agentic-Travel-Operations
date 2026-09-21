@@ -198,6 +198,17 @@ export interface OrchestrationDecision {
   travelerNotification?: TravelerLocalizedNotification;
 }
 
+export interface OutboxNoticeRecord {
+  id: string;
+  eventId: string;
+  providerName?: string;
+  providerPhone: string;
+  message: string;
+  status: 'pending' | 'dispatched' | 'failed';
+  dispatchedAt?: string;
+  error?: string;
+}
+
 export interface OrchestrationExecutionResult {
   success: boolean;
   decision?: OrchestrationDecision;
@@ -207,6 +218,8 @@ export interface OrchestrationExecutionResult {
   travelerNotification?: TravelerLocalizedNotification;
   error?: string;
   validationViolations?: string[];
+  outboxNotices?: OutboxNoticeRecord[];
+  rollbackOccurred?: boolean;
 }
 
 export interface ProviderNotificationDetails {

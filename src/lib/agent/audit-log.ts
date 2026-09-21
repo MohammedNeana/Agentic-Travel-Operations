@@ -6,7 +6,8 @@ export type AgentOperationType =
   | 'notice_dispatch'
   | 'action_boundary_block'
   | 'clarification_request'
-  | 'idempotency_skip';
+  | 'idempotency_skip'
+  | 'transaction_rollback';
 
 export interface AgentAuditEntry {
   operationId: string;

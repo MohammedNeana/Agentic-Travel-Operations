@@ -5,6 +5,7 @@ import {
   OrchestrationExecutionResult,
   ScheduleAdjustment,
   DownstreamVendorNotice,
+  OutboxNoticeRecord,
 } from './types';
 import { callLLMJson } from '@/lib/ai/llm-client';
 import { validateOrchestrationDecision } from '@/lib/agent/action-validator';
@@ -186,7 +187,16 @@ export async function orchestrateItineraryCascade(options: {
 
   const validatedDecision = validation.validatedDecision;
 
-  let updatedEventsCount = 0;
+  const targetIds = validatedDecision.scheduleAdjustments.map((a) => a.eventId);
+  const { data: snapshotRows } = await supabase
+    .from('itinerary_events')
+    .select('id, start_time, end_time, status, escalation_reason, updated_at')
+    .in('id', targetIds);
+
+  const successfullyUpdatedIds: string[] = [];
+  let updateFailed = false;
+  let updateErrorMessage = '';
+
   for (const adj of validatedDecision.scheduleAdjustments) {
     const startStr = adj.newStartTime.length === 5 ? `${adj.newStartTime}:00` : adj.newStartTime;
     const endStr = adj.newEndTime.length === 5 ? `${adj.newEndTime}:00` : adj.newEndTime;
@@ -207,22 +217,77 @@ export async function orchestrateItineraryCascade(options: {
       })
       .eq('id', adj.eventId);
 
-    if (!updateErr) {
-      updatedEventsCount++;
+    if (updateErr) {
+      updateFailed = true;
+      updateErrorMessage = updateErr.message;
+      break;
     }
+    successfullyUpdatedIds.push(adj.eventId);
   }
 
-  let dispatchedNoticesCount = 0;
-  for (const notice of validatedDecision.downstreamNotices) {
-    if (notice.whatsappMessage && notice.whatsappMessage.trim().length > 0) {
-      const sendRes = await sendWhatsAppTextMessage(
-        notice.providerPhone || '',
-        notice.whatsappMessage
-      );
-
-      if (sendRes.success) {
-        dispatchedNoticesCount++;
+  if (updateFailed) {
+    if (snapshotRows && snapshotRows.length > 0 && successfullyUpdatedIds.length > 0) {
+      const rowsToRollback = snapshotRows.filter((r) => successfullyUpdatedIds.includes(r.id));
+      for (const orig of rowsToRollback) {
+        await supabase
+          .from('itinerary_events')
+          .update({
+            start_time: orig.start_time,
+            end_time: orig.end_time,
+            status: orig.status,
+            escalation_reason: orig.escalation_reason,
+            updated_at: orig.updated_at,
+          })
+          .eq('id', orig.id);
       }
+    }
+
+    await recordAgentOperation({
+      operationId: crypto.randomUUID(),
+      operationType: 'transaction_rollback',
+      tenantId: options.tenantId || targetEvent.tenant_id,
+      itineraryId: targetEvent.itinerary_id,
+      eventId: targetEvent.id,
+      triggerMessageId: options.triggerMessageId,
+      senderPhone: options.senderPhone,
+      llmModel: model,
+      latencyMs: Date.now() - startTs,
+      rationale: `Atomic transaction rollback: ${updateErrorMessage}`,
+      validationStatus: 'rejected',
+      violations: [`Database Update Failure: ${updateErrorMessage}`],
+    });
+
+    return {
+      success: false,
+      updatedEventsCount: 0,
+      dispatchedNoticesCount: 0,
+      error: `Transaction rolled back due to update error: ${updateErrorMessage}`,
+      incidentSummary: validatedDecision.incidentSummary,
+      rollbackOccurred: true,
+    };
+  }
+
+  const outboxNotices: OutboxNoticeRecord[] = validatedDecision.downstreamNotices
+    .filter((n) => n.whatsappMessage && n.whatsappMessage.trim().length > 0)
+    .map((notice) => ({
+      id: crypto.randomUUID(),
+      eventId: notice.eventId,
+      providerName: notice.providerName,
+      providerPhone: notice.providerPhone || '',
+      message: notice.whatsappMessage,
+      status: 'pending',
+    }));
+
+  let dispatchedNoticesCount = 0;
+  for (const item of outboxNotices) {
+    const sendRes = await sendWhatsAppTextMessage(item.providerPhone, item.message);
+    if (sendRes.success) {
+      item.status = 'dispatched';
+      item.dispatchedAt = new Date().toISOString();
+      dispatchedNoticesCount++;
+    } else {
+      item.status = 'failed';
+      item.error = sendRes.error || 'Failed to dispatch via WhatsApp Cloud API';
     }
   }
 
@@ -240,8 +305,10 @@ export async function orchestrateItineraryCascade(options: {
     validationStatus: 'passed',
     metadata: {
       delayMinutes: validatedDecision.delayMinutes,
-      updatedEventsCount,
+      updatedEventsCount: successfullyUpdatedIds.length,
       dispatchedNoticesCount,
+      totalOutboxNotices: outboxNotices.length,
+      outboxNotices,
       incidentType: validatedDecision.incidentType,
     },
   });
@@ -249,10 +316,11 @@ export async function orchestrateItineraryCascade(options: {
   return {
     success: true,
     decision: validatedDecision,
-    updatedEventsCount,
+    updatedEventsCount: successfullyUpdatedIds.length,
     dispatchedNoticesCount,
     incidentSummary: validatedDecision.incidentSummary,
     travelerNotification: validatedDecision.travelerNotification,
+    outboxNotices,
   };
 }
 
