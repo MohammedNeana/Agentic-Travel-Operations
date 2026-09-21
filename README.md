@@ -10,7 +10,7 @@
 
 An enterprise-grade B2B SaaS platform engineered specifically for **Destination Management Companies (DMCs)** managing complex, multi-day itineraries and local experiential supply.
 
-**Agentic Travel Operations** bridges the gap between fragmented local experience creators scattered across social media and the high-stakes operational realities of running live multi-day tourist itineraries. It eliminates manual firefighting by combining **unstructured supplier extraction**, **hybrid semantic vector search**, **natural conversational WhatsApp dispatching**, and a **90% autonomous self-healing operations room** that absorbs delays and prevents schedule collapse before travelers are affected.
+**Agentic Travel Operations** bridges the gap between fragmented local experience creators scattered across social media and the high-stakes operational realities of running live multi-day tourist itineraries. It eliminates manual firefighting by combining **unstructured supplier extraction**, **hybrid semantic vector search**, **natural conversational WhatsApp dispatching**, and an **autonomous self-healing operations engine** with deterministic safety boundaries that absorbs delays and prevents schedule collapse before travelers are affected.
 
 ---
 
@@ -76,13 +76,13 @@ flowchart TD
 - **Voice Note Comprehension:** Routes incoming WhatsApp audio notes through Groq's high-speed `whisper-large-v3` pipeline, accurately transcribing colloquial voice notes in milliseconds.
 - **Multi-Group Disambiguation:** When a supplier manages multiple groups on the same date (e.g., a morning group currently running vs. an upcoming afternoon VIP delegation), the system analyzes temporal clues, group sizes, and nationalities or opens a conversational clarification loop rather than making blind assumptions.
 
-### 4. 90% Autonomous Operations Room (Self-Healing Cascades)
+### 4. Autonomous Operations Center (Deterministic Schedule Cascades)
 - **Automatic Disruption Handling:** When a vendor reports a delay or breakdown, the AI Operations Orchestrator:
   1. Quantifies delay magnitude and identifies every subsequent downstream booking in the day's chain.
   2. Recalculates start and end times to eliminate overlap while maintaining transit buffers.
   3. Updates `itinerary_events` in Supabase with updated timestamps and escalation tags.
   4. Automatically drafts and dispatches a warm, conversational WhatsApp notice to downstream vendors, confirming their readiness at the revised time.
-- **Multilingual Tour Leader Notifications:** Generates real-time, culturally reassuring updates translated into the traveler group's native language (**Japanese 🇯🇵**, **Italian 🇮🇹**, **English 🇬🇧**, **French 🇫🇷**, **German 🇩🇪**) so tour leaders can proactively brief guests before frustration occurs.
+- **Multilingual Tour Leader Notifications:** Generates real-time, culturally reassuring updates translated into the traveler group's native language (**Japanese**, **Italian**, **English**, **French**, **German**) so tour leaders can proactively brief guests before frustration occurs.
 
 ### 5. Predictive Regional Demand Forecasting (`/forecasting`)
 - **Macro Seasonal Intelligence:** Real-time forecasting of visitor surges, capacity pressure scores (1–100), and pricing spikes across regional tourism hubs, high seasons, and festival peaks.
@@ -96,16 +96,16 @@ flowchart TD
 
 ---
 
-## Operational Performance Benchmark
+## Architectural Comparison & Design Goals
 
-| Metric | Traditional Manual DMC Operations | Agentic Travel Operations Autonomous Platform | Impact / Improvement |
+| Operational Dimension | Traditional Manual Operations | Autonomous DMC Engine Target | Architectural Safeguard |
 | :--- | :--- | :--- | :--- |
-| **Disruption Resolution Time** | 35 – 50 minutes (frantic phone calls) | **< 4 seconds** (automatic cascade) | **99% faster incident recovery** |
-| **Downstream Supplier Notice** | Often forgotten or relayed late | **Instant automated WhatsApp dispatch** | **Zero vendor double-booking or no-shows** |
-| **Supplier Adoption Friction** | High (suppliers reject apps & portals) | **Zero (100% native WhatsApp chat)** | **100% supplier participation rate** |
-| **Schedule Conflict Detection** | Manual inspection on spreadsheets | **Automated real-time sanity engine** | **Eliminates transit & booking overlap** |
-| **International Guest Trust** | Stressful delays communicated late | **Native language notices (JP, IT, EN)** | **Protects 5-star TripAdvisor / OTA reviews** |
-| **Supplier Sourcing Speed** | Hours searching Instagram/WhatsApp | **< 30ms semantic vector search** | **Instant supplier matching** |
+| **Disruption Recovery** | 35 – 50 mins of manual phone calls | Sub-second deterministic cascade | Action Boundary verifies bounds & 30m transit buffers |
+| **Downstream Notice** | Often forgotten or relayed late | Automated outbox WhatsApp dispatch | Staged Outbox prevents notice loss on worker error |
+| **Supplier Adoption** | High friction (portals / apps) | Zero friction (100% WhatsApp chat/audio) | Groq Whisper + Dialect-aware intent parsing |
+| **Schedule Integrity** | Manual inspection on spreadsheets | Automated chronological timeline checks | Rejects overlaps (`end > next.start`) & tight buffers |
+| **Guest Communication** | Delayed, reactive notifications | Proactive multi-language traveler briefings | Localized notification generation (JP, IT, EN, FR, DE) |
+| **Supplier Discovery** | Hours browsing social channels | < 30ms local ONNX vector ranking | Tenant-isolated hybrid semantic vector search |
 
 ---
 
