@@ -31,29 +31,49 @@ Destination Management Companies (DMCs) manage high-value, bespoke travel itiner
 ```mermaid
 flowchart TD
     subgraph Sourcing ["1. Sourcing & Semantic Discovery"]
-        Web[Social / Web / Raw Text] --> Extractor["Groq Llama 3.3 70B Structured Extractor"]
-        Extractor --> DB_Providers[("Supabase: experience_providers")]
-        Emb["In-Process ONNX Embeddings (all-MiniLM-L6-v2)"] --> DB_Vector[("pgvector 384-dim Hybrid Index")]
+        Web["Social / Web / Raw Text"] --> SSRF["SSRF Firewall (DNS & Private IP Filter)"]
+        SSRF --> Extractor["Groq Llama 3.3 70B Structured Extractor"]
+        Extractor --> DB_Providers[("Supabase: experience_providers (Tenant-Isolated)")]
+        DB_Providers --> Emb["In-Process ONNX Embeddings (all-MiniLM-L6-v2)"]
+        Emb --> DB_Vector[("pgvector 384-dim Hybrid Index")]
     end
 
-    subgraph Builder ["2. Constraint-Aware Itinerary Builder"]
-        Traveler["Traveler Profile (Dietary, Mobility, Language)"] --> Matcher["Hybrid Semantic Matcher (pgvector RPC)"]
+    subgraph Builder ["2. Multi-Tenant Itinerary Builder"]
+        Traveler["Authenticated Traveler Profile (Dietary, Mobility, Language)"] --> Matcher["Hybrid Semantic Matcher (pgvector RPC)"]
         DB_Vector --> Matcher
         Matcher --> Schedule["Conflict-Aware Schedule Engine (Transit & Time Buffers)"]
     end
 
-    subgraph LiveOps ["3. WhatsApp-Native Operations & Self-Healing Room"]
-        VendorMsg["Supplier WhatsApp (Text or Audio Voice Note)"] --> WAHook["Meta WhatsApp Cloud API Webhook"]
-        WAHook --> Whisper["Groq Whisper-large-v3 (Multilingual Voice Transcription)"]
-        Whisper --> Disambig["Multi-Group Disambiguation (Resolves Conflicting Tours)"]
-        Disambig --> Orchestrator["AI Operations Dispatcher (Llama 3.3 70B)"]
+    subgraph Ingress ["3. Webhook Ingress & Idempotency"]
+        VendorMsg["Supplier WhatsApp (Text or Voice Note)"] --> WAHook["Meta WhatsApp Cloud API Webhook"]
+        WAHook --> SecVerify{"HMAC-SHA256 Sig & Fail-Closed Gate"}
+        SecVerify -- "Valid" --> Idemp{"Atomic State Machine Lock (Lease Check-and-Set)"}
+        SecVerify -- "Invalid" --> DropMsg["Reject (401 Unauthorized)"]
+        Idemp -- "Acquired" --> Whisper["Groq Whisper-large-v3 (Voice-to-Text)"]
+        Idemp -- "Duplicate" --> AckDuplicate["200 OK (Duplicate Delivery Suppressed)"]
+    end
+
+    subgraph Reasoning ["4. Intent, Disambiguation & Semantic Authorization"]
+        Whisper --> Disambig["Candidate Group Matching & Context Disambiguation"]
+        Disambig --> SemAuth{"Semantic Authorization Gate (Vendor Event Ownership)"}
+        SemAuth -- "Denied" --> SecEscalate["Security Escalation & Block Audit"]
+        SemAuth -- "Authorized" --> Orchestrator["AI Operations Dispatcher (Llama 3.3 70B)"]
+    end
+
+    subgraph Governance ["5. Action Boundary, Transactions & Outbox Dispatch"]
+        Orchestrator --> ActionBoundary{"Deterministic Action Boundary (action-validator.ts)"}
         
-        Orchestrator --> Shift["1. Recalculate Itinerary & Update Supabase DB"]
-        Orchestrator --> Downstream["2. Auto-Dispatch Heads-up WhatsApp to Next Vendors"]
-        Orchestrator --> Multilingual["3. Generate Localized Notice for Tour Leader (JP, IT, EN)"]
+        ActionBoundary -- "Violation (Overlap / <30m Buffer / Flight)" --> Escalate["Flag Event 'Escalated' & Alert Ops Manager"]
         
-        Shift --> UI["Real-Time Coordinator Dashboard (Supabase Realtime)"]
-        Downstream --> NextVendor["Subsequent Provider's WhatsApp (Polite Conversational Heads-up)"]
+        ActionBoundary -- "Approved" --> TxSnapshot["Transactional Snapshot & Atomic DB Update"]
+        TxSnapshot -- "DB Error" --> Rollback["Atomic State Rollback & Rollback Audit"]
+        
+        TxSnapshot -- "Success" --> Outbox["Staged Outbox Notice Queue"]
+        Outbox --> DispatchWA["Meta WhatsApp Cloud API Outbound Dispatch"]
+        Outbox --> TourLeader["Localized Traveler Briefing (JP, IT, EN, FR, DE)"]
+        
+        TxSnapshot --> Audit[("Forensic Audit Log: operation_type, tenant_id, latency")]
+        TxSnapshot --> UI["Real-Time Coordinator Dashboard (Supabase Realtime)"]
     end
 ```
 
