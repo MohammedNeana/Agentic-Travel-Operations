@@ -37,20 +37,16 @@ export async function POST(request: NextRequest) {
     const interests = Array.isArray(body.interests) ? body.interests : ['تراث وثقافة', 'سفاري صحراوي'];
     const destinations = Array.isArray(body.destinations) ? body.destinations : ['العُلا', 'الرياض'];
     const supabase = createServerSupabaseClient();
-    let tenantId: string | undefined;
-
+    let tenantId: string;
     try {
       tenantId = await resolveAuthorizedTenantId(request, body.tenant_id);
-    } catch {
-      if (body.tenant_id && body.tenant_id.trim().length > 0) {
-        tenantId = body.tenant_id.trim();
-      }
-    }
-
-    if (!tenantId) {
+    } catch (authError) {
       return NextResponse.json(
-        { success: false, error: 'Tenant ID is required and could not be resolved.' },
-        { status: 400 }
+        {
+          success: false,
+          error: authError instanceof Error ? authError.message : 'Unauthorized: Valid tenant session required.',
+        },
+        { status: 401 }
       );
     }
     const limit = typeof body.limit === 'number' ? body.limit : 5;
@@ -145,20 +141,16 @@ export async function GET(request: NextRequest) {
     const interests = interestsParam ? interestsParam.split(',') : ['تراث وثقافة', 'سفاري صحراوي'];
     const supabase = createServerSupabaseClient();
     const requestedTenant = searchParams.get('tenant_id')?.trim();
-    let tenantId: string | undefined;
-
+    let tenantId: string;
     try {
       tenantId = await resolveAuthorizedTenantId(request, requestedTenant);
-    } catch {
-      if (requestedTenant && requestedTenant.length > 0) {
-        tenantId = requestedTenant;
-      }
-    }
-
-    if (!tenantId) {
+    } catch (authError) {
       return NextResponse.json(
-        { success: false, error: 'Tenant ID is required and could not be resolved.' },
-        { status: 400 }
+        {
+          success: false,
+          error: authError instanceof Error ? authError.message : 'Unauthorized: Valid tenant session required.',
+        },
+        { status: 401 }
       );
     }
 

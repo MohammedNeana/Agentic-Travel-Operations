@@ -15,13 +15,17 @@ export async function GET(req: NextRequest) {
     const travelerId = searchParams.get('traveler_id') || undefined;
     const requestedTenant = searchParams.get('tenant_id') || undefined;
 
-    let tenantId: string | undefined;
+    let tenantId: string;
     try {
       tenantId = await resolveAuthorizedTenantId(req, requestedTenant);
-    } catch {
-      if (requestedTenant && requestedTenant.trim().length > 0) {
-        tenantId = requestedTenant.trim();
-      }
+    } catch (authError) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: authError instanceof Error ? authError.message : 'Unauthorized: Valid tenant session required.',
+        },
+        { status: 401 }
+      );
     }
 
     const [itinerary, travelers] = await Promise.all([

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { createServerSupabaseClient, resolveAuthorizedTenantId } from '@/lib/supabase/server';
 import { callLLMJson } from '@/lib/ai/llm-client';
 
 export const dynamic = 'force-dynamic';
@@ -54,19 +54,36 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const filterCity = searchParams.get('city') || undefined;
 
+    const requestedTenant = searchParams.get('tenant_id') || undefined;
+    let tenantId: string;
+    try {
+      tenantId = await resolveAuthorizedTenantId(req, requestedTenant);
+    } catch (authError) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: authError instanceof Error ? authError.message : 'Unauthorized: Valid tenant session required.',
+        },
+        { status: 401 }
+      );
+    }
+
     const supabase = createServerSupabaseClient();
 
     const [{ data: eventsData }, { data: providersData }, { data: itinerariesData }] =
       await Promise.all([
         supabase
           .from('itinerary_events')
-          .select('id, title, status, escalation_reason, start_time, end_time, event_date, experience_provider_id'),
+          .select('id, title, status, escalation_reason, start_time, end_time, event_date, experience_provider_id')
+          .eq('tenant_id', tenantId),
         supabase
           .from('experience_providers')
-          .select('id, name, city, experience_type, verification_status, capacity, phone_number'),
+          .select('id, name, city, experience_type, verification_status, capacity, phone_number')
+          .eq('tenant_id', tenantId),
         supabase
           .from('itineraries')
-          .select('id, title, status, guest_count, start_date, end_date'),
+          .select('id, title, status, guest_count, start_date, end_date')
+          .eq('tenant_id', tenantId),
       ]);
 
     const events = eventsData || [];

@@ -60,10 +60,21 @@ export async function POST(req: NextRequest) {
       .eq('id', itineraryId)
       .single();
 
-    const resolvedTenantId = await resolveAuthorizedTenantId(
-      req,
-      itinData?.tenant_id || tenantId
-    );
+    let resolvedTenantId: string;
+    try {
+      resolvedTenantId = await resolveAuthorizedTenantId(
+        req,
+        itinData?.tenant_id || tenantId
+      );
+    } catch (authError) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: authError instanceof Error ? authError.message : 'Unauthorized: Valid tenant session required.',
+        },
+        { status: 401 }
+      );
+    }
 
     let finalNationality = travelerNationality;
     let finalGroupSize = groupSize;

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extractExperienceProvider } from '@/lib/ai/extraction';
 import { generateProviderEmbedding } from '@/lib/ai/embeddings';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { createServerSupabaseClient, resolveAuthorizedTenantId } from '@/lib/supabase/server';
 import { safeFetch } from '@/lib/security/ssrf';
 
 export const dynamic = 'force-dynamic';
@@ -10,43 +10,6 @@ interface DiscoverRequestBody {
   text_content?: string;
   url?: string;
   tenant_id?: string;
-}
-
-async function resolveTenantId(request: NextRequest, providedTenantId?: string): Promise<string> {
-  const supabase = createServerSupabaseClient();
-  const authHeader = request.headers.get('authorization');
-
-  if (authHeader?.startsWith('Bearer ')) {
-    const token = authHeader.replace('Bearer ', '').trim();
-    const { data: { user } } = await supabase.auth.getUser(token);
-    if (user?.id) {
-      const { data: profile } = await supabase
-        .from('users')
-        .select('tenant_id')
-        .eq('id', user.id)
-        .maybeSingle();
-      if (profile?.tenant_id) {
-        return profile.tenant_id;
-      }
-    }
-  }
-
-  const { data } = await supabase
-    .from('organizations')
-    .select('tenant_id')
-    .limit(1)
-    .maybeSingle();
-  const org = data as { tenant_id?: string } | null;
-
-  if (org?.tenant_id) {
-    return org.tenant_id;
-  }
-
-  if (providedTenantId && providedTenantId.trim().length > 0) {
-    return providedTenantId.trim();
-  }
-
-  throw new Error('Tenant ID could not be resolved from active session or database.');
 }
 
 export async function POST(request: NextRequest) {
@@ -58,6 +21,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'Invalid JSON request payload.' },
         { status: 400 }
+      );
+    }
+
+    let tenantId: string;
+    try {
+      tenantId = await resolveAuthorizedTenantId(request, body.tenant_id);
+    } catch (authError) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: authError instanceof Error ? authError.message : 'Unauthorized: Valid tenant session required.',
+        },
+        { status: 401 }
       );
     }
 
@@ -198,7 +174,6 @@ export async function POST(request: NextRequest) {
 
     const extracted = await extractExperienceProvider(textContent);
     const embedding = await generateProviderEmbedding(extracted);
-    const tenantId = await resolveTenantId(request, body.tenant_id);
 
     const supabase = createServerSupabaseClient();
     const { data: insertedProvider, error: insertError } = await supabase
