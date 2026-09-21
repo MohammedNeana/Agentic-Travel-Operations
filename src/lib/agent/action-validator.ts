@@ -28,9 +28,9 @@ export const TravelerNotificationSchema = z
   .object({
     language: z.string().min(1),
     flag: z.string().optional(),
-    title: z.string().min(1),
+    title: z.string().optional(),
     message: z.string().min(1),
-    translatedSummaryInArabic: z.string().min(1),
+    translatedSummaryInArabic: z.string().optional(),
   })
   .optional();
 
