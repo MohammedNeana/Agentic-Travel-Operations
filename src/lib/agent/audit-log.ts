@@ -28,7 +28,14 @@ export interface AgentAuditEntry {
 const recentAuditLogs: AgentAuditEntry[] = [];
 const MAX_LOG_HISTORY = 500;
 
-export async function recordAgentOperation(entry: AgentAuditEntry): Promise<void> {
+export interface AuditRecordResult {
+  success: boolean;
+  persistedToDb: boolean;
+  operationId: string;
+  error?: string;
+}
+
+export async function recordAgentOperation(entry: AgentAuditEntry): Promise<AuditRecordResult> {
   const timestamp = entry.createdAt || new Date().toISOString();
   const record: AgentAuditEntry = {
     ...entry,
@@ -42,7 +49,7 @@ export async function recordAgentOperation(entry: AgentAuditEntry): Promise<void
 
   try {
     const supabase = createServerSupabaseClient();
-    await supabase.from('agent_audit_log').insert({
+    const { error: insertErr } = await supabase.from('agent_audit_log').insert({
       operation_id: record.operationId,
       operation_type: record.operationType,
       tenant_id: record.tenantId || null,
@@ -58,7 +65,18 @@ export async function recordAgentOperation(entry: AgentAuditEntry): Promise<void
       metadata: record.metadata || {},
       created_at: timestamp,
     });
-  } catch {}
+
+    if (insertErr) {
+      record.metadata = { ...record.metadata, dbPersistenceError: insertErr.message };
+      return { success: true, persistedToDb: false, operationId: record.operationId, error: insertErr.message };
+    }
+
+    return { success: true, persistedToDb: true, operationId: record.operationId };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Database audit insert failed';
+    record.metadata = { ...record.metadata, dbPersistenceError: message };
+    return { success: true, persistedToDb: false, operationId: record.operationId, error: message };
+  }
 }
 
 export function getRecentAgentAuditLogs(limit = 50): AgentAuditEntry[] {

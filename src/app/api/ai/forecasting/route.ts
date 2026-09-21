@@ -23,6 +23,8 @@ export interface DemandForecastResult {
     demandLevel: string;
     occupancyRate: string;
   }>;
+  provenance?: 'scenario_simulation';
+  simulationType?: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -90,7 +92,13 @@ Respond ONLY with valid JSON in this exact structure:
       success: true,
       source: result.provider,
       model: result.model,
-      forecast: result.data,
+      provenance: 'scenario_simulation',
+      simulationType: 'AI Regional Demand Scenario Simulation',
+      forecast: {
+        ...result.data,
+        provenance: 'scenario_simulation',
+        simulationType: 'AI Regional Demand Scenario Simulation',
+      },
     });
   } catch (error) {
     return NextResponse.json(

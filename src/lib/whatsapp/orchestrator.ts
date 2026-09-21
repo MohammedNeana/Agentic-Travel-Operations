@@ -15,6 +15,8 @@ export async function orchestrateItineraryCascade(options: {
   eventId: string;
   vendorMessage: string;
   senderPhone?: string;
+  triggerMessageId?: string;
+  tenantId?: string;
 }): Promise<OrchestrationExecutionResult> {
   const supabase = createServerSupabaseClient();
   const { eventId, vendorMessage } = options;
@@ -22,7 +24,7 @@ export async function orchestrateItineraryCascade(options: {
 
   const { data: targetEvent, error: targetErr } = await supabase
     .from('itinerary_events')
-    .select('id, itinerary_id, event_date, start_time, end_time, title, status, sort_order, experience_provider_id')
+    .select('id, itinerary_id, tenant_id, event_date, start_time, end_time, title, status, sort_order, experience_provider_id')
     .eq('id', eventId)
     .single();
 
@@ -79,6 +81,9 @@ export async function orchestrateItineraryCascade(options: {
 
   const enrichedEvents = allEvents.map((ev, index) => {
     const prov = providers?.find((p) => p.id === ev.experience_provider_id);
+    const isImmutable =
+      Boolean((ev as Record<string, unknown>).is_immutable) ||
+      /flight|طيران|مطار|airport|border|منفذ|قطار|train/i.test(ev.title);
     return {
       order: index + 1,
       eventId: ev.id,
@@ -90,6 +95,7 @@ export async function orchestrateItineraryCascade(options: {
       providerName: prov?.name || ev.title,
       providerPhone: prov?.phone_number || '',
       isTargetEvent: ev.id === targetEvent.id,
+      isImmutable,
     };
   });
 
@@ -137,7 +143,9 @@ export async function orchestrateItineraryCascade(options: {
       startTime: e.startTime,
       endTime: e.endTime,
       status: e.status,
+      isImmutable: e.isImmutable,
     })),
+    minTransitBufferMinutes: 30,
   });
 
   if (!validation.isValid || !validation.validatedDecision) {
@@ -154,8 +162,10 @@ export async function orchestrateItineraryCascade(options: {
     await recordAgentOperation({
       operationId: crypto.randomUUID(),
       operationType: 'action_boundary_block',
+      tenantId: options.tenantId || targetEvent.tenant_id,
       itineraryId: targetEvent.itinerary_id,
       eventId: targetEvent.id,
+      triggerMessageId: options.triggerMessageId,
       senderPhone: options.senderPhone,
       llmModel: model,
       latencyMs: Date.now() - startTs,
@@ -219,8 +229,10 @@ export async function orchestrateItineraryCascade(options: {
   await recordAgentOperation({
     operationId: crypto.randomUUID(),
     operationType: 'schedule_cascade',
+    tenantId: options.tenantId || targetEvent.tenant_id,
     itineraryId: targetEvent.itinerary_id,
     eventId: targetEvent.id,
+    triggerMessageId: options.triggerMessageId,
     senderPhone: options.senderPhone,
     llmModel: model,
     latencyMs: Date.now() - startTs,

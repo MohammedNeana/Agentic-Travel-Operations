@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
+import {
+  createAuthenticatedServerClient,
+  resolveAuthorizedTenantId,
+} from '@/lib/supabase/server';
 import { sendProviderNotification } from '@/lib/whatsapp/sender';
 
 export const dynamic = 'force-dynamic';
@@ -49,8 +52,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const supabase = createServerSupabaseClient();
-    const fallbackTenantId = tenantId;
+    const supabase = createAuthenticatedServerClient(req);
+
+    const { data: itinData } = await supabase
+      .from('itineraries')
+      .select('tenant_id, guest_count, traveler_profile_id')
+      .eq('id', itineraryId)
+      .single();
+
+    const resolvedTenantId = await resolveAuthorizedTenantId(
+      req,
+      itinData?.tenant_id || tenantId
+    );
 
     let finalNationality = travelerNationality;
     let finalGroupSize = groupSize;
@@ -58,12 +71,6 @@ export async function POST(req: NextRequest) {
     let finalMobility = mobilityNotes;
 
     if (!finalNationality || !finalGroupSize || !finalDietary || !finalMobility) {
-      const { data: itinData } = await supabase
-        .from('itineraries')
-        .select('guest_count, traveler_profile_id')
-        .eq('id', itineraryId)
-        .single();
-
       if (itinData) {
         if (!finalGroupSize) finalGroupSize = itinData.guest_count;
         if (itinData.traveler_profile_id) {
@@ -88,13 +95,15 @@ export async function POST(req: NextRequest) {
       .select('id')
       .eq('itinerary_id', itineraryId);
 
-    const currentDbIds = (existingEvents || []).map((e) => e.id);
-    const existingDbIdSet = new Set(currentDbIds);
-    const newEventIds = new Set(events.map((e) => e.id));
+    const currentDbIds: string[] = (
+      (existingEvents as Array<{ id: string }> | null) || []
+    ).map((e: { id: string }) => e.id);
+    const existingDbIdSet = new Set<string>(currentDbIds);
+    const newEventIds = new Set<string>(events.map((e) => e.id));
 
     const newlyAddedEvents = events.filter((ev) => !existingDbIdSet.has(ev.id));
 
-    const idsToDelete = currentDbIds.filter((id) => !newEventIds.has(id));
+    const idsToDelete = currentDbIds.filter((id: string) => !newEventIds.has(id));
     if (idsToDelete.length > 0) {
       await supabase
         .from('itinerary_events')
@@ -117,7 +126,7 @@ export async function POST(req: NextRequest) {
 
         return {
           id: ev.id,
-          tenant_id: ev.tenantId || fallbackTenantId,
+          tenant_id: resolvedTenantId,
           itinerary_id: itineraryId,
           experience_provider_id: ev.experienceProviderId || null,
           title: ev.title,

@@ -26,9 +26,10 @@ interface ChatCompletionResponse {
 }
 
 export async function callLLMJson<T = unknown>(options: LLMRequestOptions): Promise<LLMResponse<T>> {
-  const { systemPrompt, userPrompt, temperature = 0.2 } = options;
+  const { systemPrompt, userPrompt, temperature = 0.2, maxTokens } = options;
 
   const groqApiKey = process.env.GROQ_API_KEY;
+  const groqPrimaryModel = process.env.GROQ_LLM_MODEL || 'llama-3.3-70b-versatile';
   const openaiApiKey = process.env.OPENAI_API_KEY;
   const localUrl = process.env.LOCAL_LLM_URL;
   const localModel = process.env.LOCAL_LLM_MODEL || 'llama3.2';
@@ -54,7 +55,7 @@ export async function callLLMJson<T = unknown>(options: LLMRequestOptions): Prom
     candidateEndpoints.push(
       {
         provider: 'groq',
-        model: 'llama-3.3-70b-versatile',
+        model: groqPrimaryModel,
         url: 'https://api.groq.com/openai/v1/chat/completions',
         apiKey: groqApiKey,
       },
@@ -98,6 +99,7 @@ export async function callLLMJson<T = unknown>(options: LLMRequestOptions): Prom
           ],
           response_format: { type: 'json_object' },
           temperature,
+          ...(typeof maxTokens === 'number' ? { max_tokens: maxTokens } : {}),
         }),
       });
 

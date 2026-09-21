@@ -1,26 +1,162 @@
-interface CachedMessageRecord {
+import { createServerSupabaseClient } from '@/lib/supabase/server';
+
+export type MessageProcessingState = 'received' | 'processing' | 'completed' | 'failed';
+
+export interface MessageIdempotencyRecord {
   messageId: string;
-  processedAt: number;
+  status: MessageProcessingState;
+  updatedAt: number;
   details?: Record<string, unknown>;
+  error?: string;
 }
 
-const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
-const processedMessageMap = new Map<string, CachedMessageRecord>();
+const IN_FLIGHT_LEASE_MS = 2 * 60 * 1000;
+const COMPLETED_TTL_MS = 24 * 60 * 60 * 1000;
+const inMemoryStore = new Map<string, MessageIdempotencyRecord>();
+
+export async function acquireMessageProcessingLock(messageId: string): Promise<{
+  acquired: boolean;
+  state?: MessageProcessingState;
+}> {
+  if (!messageId || typeof messageId !== 'string') {
+    return { acquired: false };
+  }
+
+  const now = Date.now();
+
+  try {
+    const supabase = createServerSupabaseClient();
+    const { data: existing } = await supabase
+      .from('whatsapp_messages')
+      .select('status, updated_at')
+      .eq('message_id', messageId)
+      .maybeSingle();
+
+    if (existing) {
+      if (existing.status === 'completed') {
+        return { acquired: false, state: 'completed' };
+      }
+      const lastUpdate = existing.updated_at ? new Date(existing.updated_at).getTime() : 0;
+      if (existing.status === 'processing' && now - lastUpdate < IN_FLIGHT_LEASE_MS) {
+        return { acquired: false, state: 'processing' };
+      }
+      await supabase
+        .from('whatsapp_messages')
+        .update({
+          status: 'processing',
+          updated_at: new Date(now).toISOString(),
+        })
+        .eq('message_id', messageId);
+
+      inMemoryStore.set(messageId, {
+        messageId,
+        status: 'processing',
+        updatedAt: now,
+      });
+
+      return { acquired: true, state: 'processing' };
+    }
+
+    const { error: insertErr } = await supabase
+      .from('whatsapp_messages')
+      .insert({
+        message_id: messageId,
+        status: 'processing',
+        updated_at: new Date(now).toISOString(),
+      });
+
+    if (!insertErr) {
+      inMemoryStore.set(messageId, {
+        messageId,
+        status: 'processing',
+        updatedAt: now,
+      });
+      return { acquired: true, state: 'processing' };
+    }
+  } catch {}
+
+  const mem = inMemoryStore.get(messageId);
+  if (mem) {
+    if (mem.status === 'completed') {
+      if (now - mem.updatedAt < COMPLETED_TTL_MS) {
+        return { acquired: false, state: 'completed' };
+      }
+      inMemoryStore.delete(messageId);
+    } else if (mem.status === 'processing') {
+      if (now - mem.updatedAt < IN_FLIGHT_LEASE_MS) {
+        return { acquired: false, state: 'processing' };
+      }
+    }
+  }
+
+  inMemoryStore.set(messageId, {
+    messageId,
+    status: 'processing',
+    updatedAt: now,
+  });
+
+  return { acquired: true, state: 'processing' };
+}
+
+export async function markMessageCompleted(
+  messageId: string,
+  details?: Record<string, unknown>
+): Promise<void> {
+  if (!messageId || typeof messageId !== 'string') return;
+  const now = Date.now();
+
+  inMemoryStore.set(messageId, {
+    messageId,
+    status: 'completed',
+    updatedAt: now,
+    details,
+  });
+
+  try {
+    const supabase = createServerSupabaseClient();
+    await supabase
+      .from('whatsapp_messages')
+      .update({
+        status: 'completed',
+        updated_at: new Date(now).toISOString(),
+        metadata: details || {},
+      })
+      .eq('message_id', messageId);
+  } catch {}
+}
+
+export async function markMessageFailed(
+  messageId: string,
+  error?: string
+): Promise<void> {
+  if (!messageId || typeof messageId !== 'string') return;
+  const now = Date.now();
+
+  inMemoryStore.set(messageId, {
+    messageId,
+    status: 'failed',
+    updatedAt: now,
+    error,
+  });
+
+  try {
+    const supabase = createServerSupabaseClient();
+    await supabase
+      .from('whatsapp_messages')
+      .update({
+        status: 'failed',
+        updated_at: new Date(now).toISOString(),
+        error_message: error || null,
+      })
+      .eq('message_id', messageId);
+  } catch {}
+}
 
 export async function isMessageProcessed(messageId: string): Promise<boolean> {
-  if (!messageId || typeof messageId !== 'string') {
-    return false;
+  const mem = inMemoryStore.get(messageId);
+  if (mem && mem.status === 'completed') {
+    return Date.now() - mem.updatedAt < COMPLETED_TTL_MS;
   }
-
-  const cached = processedMessageMap.get(messageId);
-  if (cached) {
-    const now = Date.now();
-    if (now - cached.processedAt < IDEMPOTENCY_TTL_MS) {
-      return true;
-    }
-    processedMessageMap.delete(messageId);
-  }
-
   return false;
 }
 
@@ -28,26 +164,9 @@ export async function markMessageProcessed(
   messageId: string,
   details?: Record<string, unknown>
 ): Promise<void> {
-  if (!messageId || typeof messageId !== 'string') {
-    return;
-  }
-
-  const now = Date.now();
-  processedMessageMap.set(messageId, {
-    messageId,
-    processedAt: now,
-    details,
-  });
-
-  if (processedMessageMap.size > 10000) {
-    for (const [id, rec] of processedMessageMap.entries()) {
-      if (now - rec.processedAt > IDEMPOTENCY_TTL_MS) {
-        processedMessageMap.delete(id);
-      }
-    }
-  }
+  await markMessageCompleted(messageId, details);
 }
 
 export function clearIdempotencyCache(): void {
-  processedMessageMap.clear();
+  inMemoryStore.clear();
 }

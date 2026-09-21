@@ -17,7 +17,11 @@ import {
 } from '@/lib/whatsapp/events';
 import { sendWhatsAppTextMessage } from '@/lib/whatsapp/sender';
 import { orchestrateItineraryCascade } from '@/lib/whatsapp/orchestrator';
-import { isMessageProcessed, markMessageProcessed } from '@/lib/whatsapp/idempotency';
+import {
+  acquireMessageProcessingLock,
+  markMessageCompleted,
+  markMessageFailed,
+} from '@/lib/whatsapp/idempotency';
 
 export const dynamic = 'force-dynamic';
 
@@ -68,20 +72,22 @@ export async function POST(request: NextRequest) {
     const processingResults: WebhookProcessingResult[] = [];
 
     for (const msg of messages) {
-      if (await isMessageProcessed(msg.messageId)) {
+      const lock = await acquireMessageProcessingLock(msg.messageId);
+      if (!lock.acquired) {
         processingResults.push({
           success: true,
           messageId: msg.messageId,
           actionTaken: 'no_action_needed',
-          details: { reason: 'duplicate_delivery_ignored' },
+          details: {
+            reason: lock.state === 'processing' ? 'in_flight_processing' : 'duplicate_delivery_ignored',
+          },
         });
         continue;
       }
 
-      await markMessageProcessed(msg.messageId);
-
       if (msg.action?.type === 'accept_booking') {
         const updateResult = await confirmItineraryEvent(msg.action.eventId);
+        await markMessageCompleted(msg.messageId, { action: 'accept_booking', eventId: msg.action.eventId });
 
         processingResults.push({
           success: updateResult.success,
@@ -103,6 +109,7 @@ export async function POST(request: NextRequest) {
           msg.action.eventId,
           `اعتذار عبر زر واتساب (${msg.action.buttonTitle})`
         );
+        await markMessageCompleted(msg.messageId, { action: 'reject_booking', eventId: msg.action.eventId });
 
         processingResults.push({
           success: updateResult.success,
@@ -167,6 +174,25 @@ export async function POST(request: NextRequest) {
               messageText: transcription.text,
             }));
 
+          const isAuthorizedEvent = targetEventId
+            ? candidateEvents.some((c) => c.eventId === targetEventId)
+            : false;
+
+          if (targetEventId && !isAuthorizedEvent) {
+            processingResults.push({
+              success: false,
+              messageId: msg.messageId,
+              actionTaken: 'unhandled_action',
+              error: `Semantic Authorization Block: Sender ${msg.fromPhoneNumber} is not authorized for target event ${targetEventId}.`,
+              details: {
+                from: msg.fromPhoneNumber,
+                attemptedEventId: targetEventId,
+                allowedEventIds: candidateEvents.map((c) => c.eventId),
+              },
+            });
+            continue;
+          }
+
           if (classification.category === 'Acceptance' && targetEventId) {
             const confirmResult = await confirmItineraryEvent(targetEventId);
             processingResults.push({
@@ -203,6 +229,7 @@ export async function POST(request: NextRequest) {
                 eventId: targetEventId,
                 vendorMessage: transcription.text,
                 senderPhone: msg.fromPhoneNumber,
+                triggerMessageId: msg.messageId,
               });
 
               processingResults.push({
@@ -267,12 +294,15 @@ export async function POST(request: NextRequest) {
               },
             });
           }
+          await markMessageCompleted(msg.messageId, { type: 'audio' });
         } catch (audioErr) {
+          const errMsg = audioErr instanceof Error ? audioErr.message : 'Unknown audio error';
+          await markMessageFailed(msg.messageId, errMsg);
           processingResults.push({
             success: false,
             messageId: msg.messageId,
             actionTaken: 'unhandled_action',
-            error: audioErr instanceof Error ? audioErr.message : 'Unknown audio error',
+            error: errMsg,
           });
         }
         continue;
@@ -318,6 +348,25 @@ export async function POST(request: NextRequest) {
               messageText: msg.textBody,
             }));
 
+          const isAuthorizedEvent = targetEventId
+            ? candidateEvents.some((c) => c.eventId === targetEventId)
+            : false;
+
+          if (targetEventId && !isAuthorizedEvent) {
+            processingResults.push({
+              success: false,
+              messageId: msg.messageId,
+              actionTaken: 'unhandled_action',
+              error: `Semantic Authorization Block: Sender ${msg.fromPhoneNumber} is not authorized for target event ${targetEventId}.`,
+              details: {
+                from: msg.fromPhoneNumber,
+                attemptedEventId: targetEventId,
+                allowedEventIds: candidateEvents.map((c) => c.eventId),
+              },
+            });
+            continue;
+          }
+
           if (classification.category === 'Acceptance' && targetEventId) {
             const confirmResult = await confirmItineraryEvent(targetEventId);
             processingResults.push({
@@ -354,6 +403,7 @@ export async function POST(request: NextRequest) {
                 eventId: targetEventId,
                 vendorMessage: msg.textBody,
                 senderPhone: msg.fromPhoneNumber,
+                triggerMessageId: msg.messageId,
               });
 
               processingResults.push({
@@ -418,17 +468,21 @@ export async function POST(request: NextRequest) {
               },
             });
           }
+          await markMessageCompleted(msg.messageId, { type: 'text' });
         } catch (textErr) {
+          const errMsg = textErr instanceof Error ? textErr.message : 'Unknown text error';
+          await markMessageFailed(msg.messageId, errMsg);
           processingResults.push({
             success: false,
             messageId: msg.messageId,
             actionTaken: 'unhandled_action',
-            error: textErr instanceof Error ? textErr.message : 'Unknown text error',
+            error: errMsg,
           });
         }
         continue;
       }
 
+      await markMessageCompleted(msg.messageId, { type: msg.rawType });
       processingResults.push({
         success: true,
         messageId: msg.messageId,

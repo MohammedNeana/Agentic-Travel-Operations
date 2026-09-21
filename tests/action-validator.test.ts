@@ -190,4 +190,58 @@ describe('Agent Action Boundary & Domain Constraint Validator', () => {
     expect(result.isValid).toBe(false);
     expect(result.violations.some((v) => v.includes('Cross-Day Cascade Violation'))).toBe(true);
   });
+
+  it('rejects schedule adjustments that create event overlaps', () => {
+    const overlapDecision = {
+      delayMinutes: 120,
+      incidentType: 'delay',
+      isCascadeImpact: true,
+      incidentSummary: 'Event extension causing overlap with Hegra safari',
+      scheduleAdjustments: [
+        {
+          eventId: 'event-001',
+          previousStartTime: '09:00',
+          previousEndTime: '11:30',
+          newStartTime: '09:00',
+          newEndTime: '13:30',
+          reason: 'Extended tour into subsequent event slot',
+        },
+      ],
+      downstreamNotices: [],
+    };
+
+    const result = validateOrchestrationDecision(overlapDecision, {
+      ...mockContext,
+      minTransitBufferMinutes: 30,
+    });
+    expect(result.isValid).toBe(false);
+    expect(result.violations.some((v) => v.includes('Schedule Overlap Violation'))).toBe(true);
+  });
+
+  it('enforces minimum transit buffer between consecutive events', () => {
+    const bufferViolationDecision = {
+      delayMinutes: 75,
+      incidentType: 'delay',
+      isCascadeImpact: true,
+      incidentSummary: 'Short buffer test',
+      scheduleAdjustments: [
+        {
+          eventId: 'event-001',
+          previousStartTime: '09:00',
+          previousEndTime: '11:30',
+          newStartTime: '09:00',
+          newEndTime: '12:45',
+          reason: 'Only 15 min buffer before 13:00 event',
+        },
+      ],
+      downstreamNotices: [],
+    };
+
+    const result = validateOrchestrationDecision(bufferViolationDecision, {
+      ...mockContext,
+      minTransitBufferMinutes: 30,
+    });
+    expect(result.isValid).toBe(false);
+    expect(result.violations.some((v) => v.includes('Transit Buffer Violation'))).toBe(true);
+  });
 });

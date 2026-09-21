@@ -153,6 +153,59 @@ export function validateOrchestrationDecision(
     }
   }
 
+  const minBuffer = context.minTransitBufferMinutes ?? 30;
+  const operationalDayEvents = context.knownEvents.filter(
+    (e) => !context.targetEventDate || e.date === context.targetEventDate
+  );
+
+  const adjustmentMap = new Map<string, ScheduleAdjustment>();
+  for (const adj of decision.scheduleAdjustments) {
+    adjustmentMap.set(adj.eventId, adj);
+  }
+
+  const effectiveDailyTimeline: Array<{
+    id: string;
+    title: string;
+    startMins: number;
+    endMins: number;
+    startStr: string;
+    endStr: string;
+  }> = [];
+
+  for (const ev of operationalDayEvents) {
+    const adj = adjustmentMap.get(ev.id);
+    const startStr = adj ? adj.newStartTime : ev.startTime;
+    const endStr = adj ? adj.newEndTime : ev.endTime;
+    const startMins = parseTimeToMinutes(startStr);
+    const endMins = parseTimeToMinutes(endStr);
+
+    effectiveDailyTimeline.push({
+      id: ev.id,
+      title: ev.title,
+      startMins,
+      endMins,
+      startStr,
+      endStr,
+    });
+  }
+
+  effectiveDailyTimeline.sort((a, b) => a.startMins - b.startMins || a.endMins - b.endMins);
+
+  for (let i = 0; i < effectiveDailyTimeline.length - 1; i++) {
+    const current = effectiveDailyTimeline[i];
+    const next = effectiveDailyTimeline[i + 1];
+
+    if (current.endMins > next.startMins) {
+      violations.push(
+        `Schedule Overlap Violation: Event "${current.title}" (${current.startStr} - ${current.endStr}) overlaps with "${next.title}" (${next.startStr} - ${next.endStr}).`
+      );
+    } else if (next.startMins - current.endMins < minBuffer) {
+      violations.push(
+        `Transit Buffer Violation: Insufficient transit buffer between "${current.title}" (ends ${current.endStr}) and "${next.title}" (starts ${next.startStr}). Required: ${minBuffer}m, available: ${next.startMins - current.endMins}m.`
+      );
+    }
+  }
+
   if (violations.length > 0) {
     return {
       isValid: false,
