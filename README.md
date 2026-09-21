@@ -140,6 +140,34 @@ Every table (`organizations`, `experience_providers`, `itineraries`, `itinerary_
 
 ---
 
+## AI Safety Boundaries & Governance Architecture
+
+Unlike generic LLM wrappers that directly execute raw model outputs against production databases, this platform enforces a multi-layer deterministic safety perimeter:
+
+1. **Deterministic Action Boundary (`action-validator.ts`):**
+   - **Timeline Overlap Prevention:** Automatically sorts day timelines and rejects changes where `current.endMins > next.startMins`.
+   - **Transit Buffer Enforcement:** Mandates a minimum 30-minute operational transit buffer between consecutive events.
+   - **Immutable Event Protection:** Automatically detects flights, border crossings, and high-speed rail connections, forbidding AI time mutations on locked bookings.
+   - **Single-Day Blast Radius Control:** Forbids cross-day cascading adjustments, routing complex disruptions to human operations coordinators.
+
+2. **Semantic Authorization Boundary:**
+   - Enforces supplier verification: incoming vendor messages can only trigger mutations on events explicitly mapped to that vendor's identity.
+
+3. **Distributed State-Machine Idempotency (`idempotency.ts`):**
+   - Manages webhook lifecycle transitions (`received` &rarr; `processing` &rarr; `completed` / `failed`).
+   - Leases in-flight locks with auto-recovery for transient worker crashes and retry capabilities on errors.
+
+4. **Forensic Audit Logging (`audit-log.ts`):**
+   - Persists immutable operation records capturing `operationType`, `tenantId`, `triggerMessageId`, `llmModel`, and `latencyMs`.
+
+5. **Automated Test Harness (`vitest`):**
+   - 25 rigorous unit and integration tests verifying cryptographic webhook signatures, SSRF firewall blocks, action boundary validation, and idempotency state transitions.
+   ```bash
+   npm test
+   ```
+
+---
+
 ## Project Directory Structure
 
 ```
@@ -169,20 +197,31 @@ Agentic-Travel-Operations/
 │   │   └── layout/
 │   │       └── AppNavbar.tsx             # Multi-tenant Header with Live Routing
 │   └── lib/
+│       ├── agent/
+│       │   ├── action-validator.ts       # Deterministic Schedule & Buffer Validation Boundary
+│       │   └── audit-log.ts              # Forensic Audit Logging & DB Durability Tracker
+│       ├── security/
+│       │   └── ssrf.ts                   # DNS & IP Validation Firewall for Web Ingestion
 │       ├── ai/
-│       │   ├── llm-client.ts             # Centralized Multi-Model Cascade (Groq / Local / OpenAI)
+│       │   ├── llm-client.ts             # Multi-Model Cascade (Groq / Local / OpenAI)
 │       │   ├── embeddings.ts             # Local In-Process ONNX Vector Generator (384-dim)
 │       │   └── extraction.ts             # Structured Supplier Profile Zod Schema Parser
 │       ├── whatsapp/
 │       │   ├── orchestrator.ts           # Autonomous AI Operations Dispatcher (Self-Healing)
 │       │   ├── intent.ts                 # Multi-Group Disambiguation & Arabic Intent Engine
+│       │   ├── idempotency.ts            # Distributed State-Machine Webhook Idempotency
 │       │   ├── transcription.ts          # Groq Whisper-large-v3 Audio Processing
 │       │   └── sender.ts                 # Meta Cloud API Human-Like Text Dispatcher
 │       └── supabase/
 │           ├── client.ts                 # Browser Client with Realtime Subscription
-│           └── server.ts                 # Server Client with Tenant Session Forwarding
+│           └── server.ts                 # Authenticated Server Client with Tenant Session Forwarding
+├── tests/
+│   ├── action-validator.test.ts          # Tests for Overlaps, Transit Buffers & Immutable Bookings
+│   ├── idempotency.test.ts               # Tests for Distributed Lock & Retry State Machine
+│   ├── ssrf.test.ts                      # Tests for DNS Resolution & Private IP Blocking
+│   └── webhook-security.test.ts          # Tests for HMAC-SHA256 Signatures & Timing Safe Comparison
 └── public/
-    └── Agentic_Travel_Operations.html      # Standalone Print-Ready Pitch Document
+    └── Agentic_Travel_Operations.html    # Standalone Print-Ready Pitch Document
 ```
 
 ---
