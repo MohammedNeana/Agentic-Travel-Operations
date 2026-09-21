@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getActiveItinerary, getTravelerProfiles, detectScheduleWarnings } from '@/lib/queries/itinerary-queries';
+import {
+  getActiveItinerary,
+  getTravelerProfiles,
+  detectScheduleWarnings,
+} from '@/lib/queries/itinerary-queries';
+import { resolveAuthorizedTenantId } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -8,10 +13,20 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const travelerId = searchParams.get('traveler_id') || undefined;
+    const requestedTenant = searchParams.get('tenant_id') || undefined;
+
+    let tenantId: string | undefined;
+    try {
+      tenantId = await resolveAuthorizedTenantId(req, requestedTenant);
+    } catch {
+      if (requestedTenant && requestedTenant.trim().length > 0) {
+        tenantId = requestedTenant.trim();
+      }
+    }
 
     const [itinerary, travelers] = await Promise.all([
-      getActiveItinerary(travelerId),
-      getTravelerProfiles(),
+      getActiveItinerary({ tenantId, travelerId }),
+      getTravelerProfiles(tenantId),
     ]);
 
     const activeProfile = travelers.find((t) => t.id === travelerId) || travelers[0] || null;

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateTextEmbedding, generateProviderEmbedding } from '@/lib/ai/embeddings';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { createServerSupabaseClient, resolveAuthorizedTenantId } from '@/lib/supabase/server';
 import type { SmartMatchRecommendation, ExperienceProvider } from '@/types/itinerary';
 
 export const dynamic = 'force-dynamic';
@@ -39,35 +39,14 @@ export async function POST(request: NextRequest) {
     const supabase = createServerSupabaseClient();
     let tenantId: string | undefined;
 
-    const authHeader = request.headers.get('authorization');
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.replace('Bearer ', '').trim();
-      const { data: { user } } = await supabase.auth.getUser(token);
-      if (user?.id) {
-        const { data: profile } = await supabase
-          .from('users')
-          .select('tenant_id')
-          .eq('id', user.id)
-          .maybeSingle();
-        if (profile?.tenant_id) {
-          tenantId = profile.tenant_id;
-        }
+    try {
+      tenantId = await resolveAuthorizedTenantId(request, body.tenant_id);
+    } catch {
+      if (body.tenant_id && body.tenant_id.trim().length > 0) {
+        tenantId = body.tenant_id.trim();
       }
     }
 
-    if (!tenantId) {
-      const { data } = await supabase
-        .from('organizations')
-        .select('tenant_id')
-        .limit(1)
-        .maybeSingle();
-      const org = data as { tenant_id?: string } | null;
-      tenantId = org?.tenant_id;
-    }
-
-    if (!tenantId && body.tenant_id?.trim()) {
-      tenantId = body.tenant_id.trim();
-    }
     if (!tenantId) {
       return NextResponse.json(
         { success: false, error: 'Tenant ID is required and could not be resolved.' },
@@ -79,6 +58,7 @@ export async function POST(request: NextRequest) {
     const { data: unindexedProviders } = await supabase
       .from('experience_providers')
       .select('id, name, city, experience_type, capacity, verification_status')
+      .eq('tenant_id', tenantId)
       .is('embedding', null);
 
     if (unindexedProviders && unindexedProviders.length > 0) {
@@ -93,7 +73,8 @@ export async function POST(request: NextRequest) {
         await supabase
           .from('experience_providers')
           .update({ embedding: JSON.stringify(emb) })
-          .eq('id', p.id);
+          .eq('id', p.id)
+          .eq('tenant_id', tenantId);
       }
     }
 
@@ -163,16 +144,17 @@ export async function GET(request: NextRequest) {
     const interestsParam = searchParams.get('interests');
     const interests = interestsParam ? interestsParam.split(',') : ['تراث وثقافة', 'سفاري صحراوي'];
     const supabase = createServerSupabaseClient();
-    let tenantId = searchParams.get('tenant_id')?.trim();
-    if (!tenantId) {
-      const { data } = await supabase
-        .from('organizations')
-        .select('tenant_id')
-        .limit(1)
-        .maybeSingle();
-      const org = data as { tenant_id?: string } | null;
-      tenantId = org?.tenant_id;
+    const requestedTenant = searchParams.get('tenant_id')?.trim();
+    let tenantId: string | undefined;
+
+    try {
+      tenantId = await resolveAuthorizedTenantId(request, requestedTenant);
+    } catch {
+      if (requestedTenant && requestedTenant.length > 0) {
+        tenantId = requestedTenant;
+      }
     }
+
     if (!tenantId) {
       return NextResponse.json(
         { success: false, error: 'Tenant ID is required and could not be resolved.' },
@@ -183,6 +165,7 @@ export async function GET(request: NextRequest) {
     const { data: unindexedProviders, error: selectErr } = await supabase
       .from('experience_providers')
       .select('id, name, city, experience_type, capacity, verification_status')
+      .eq('tenant_id', tenantId)
       .is('embedding', null);
 
     if (unindexedProviders && unindexedProviders.length > 0) {
@@ -197,7 +180,8 @@ export async function GET(request: NextRequest) {
         await supabase
           .from('experience_providers')
           .update({ embedding: JSON.stringify(emb) })
-          .eq('id', p.id);
+          .eq('id', p.id)
+          .eq('tenant_id', tenantId);
       }
     }
 

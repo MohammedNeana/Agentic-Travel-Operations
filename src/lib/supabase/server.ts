@@ -18,6 +18,32 @@ export function createServerSupabaseClient() {
   });
 }
 
+function extractToken(
+  request?: Request | { headers: Headers | { get(key: string): string | null } }
+): string | null {
+  if (!request?.headers) return null;
+  const authHeader = request.headers.get('authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    return authHeader.substring(7).trim();
+  }
+  const cookieHeader = request.headers.get('cookie');
+  if (cookieHeader) {
+    const match = cookieHeader.match(/sb-[a-zA-Z0-9_-]+-auth-token=([^;]+)/);
+    if (match?.[1]) {
+      try {
+        const decoded = decodeURIComponent(match[1]);
+        if (decoded.startsWith('base64-')) {
+          const parsed = JSON.parse(Buffer.from(decoded.slice(7), 'base64').toString('utf-8'));
+          return parsed?.access_token || parsed?.[0] || null;
+        }
+        const parsed = JSON.parse(decoded);
+        return parsed?.access_token || parsed?.[0] || null;
+      } catch {}
+    }
+  }
+  return null;
+}
+
 export function createAuthenticatedServerClient(
   request?: Request | { headers: Headers | { get(key: string): string | null } }
 ) {
@@ -29,9 +55,7 @@ export function createAuthenticatedServerClient(
     throw new Error('Missing Supabase environment variables.');
   }
 
-  const authHeader = request?.headers?.get('authorization');
-  const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7).trim() : null;
-
+  const token = extractToken(request);
   if (token && anonKey) {
     return createClient(url, anonKey, {
       auth: { persistSession: false },
@@ -42,7 +66,7 @@ export function createAuthenticatedServerClient(
     });
   }
 
-  const defaultKey = serviceKey || anonKey!;
+  const defaultKey = anonKey || serviceKey!;
   return createClient(url, defaultKey, {
     auth: { persistSession: false },
     global: {
@@ -56,12 +80,19 @@ export async function resolveAuthorizedTenantId(
   requestedTenantId?: string
 ): Promise<string> {
   const supabase = createServerSupabaseClient();
-  const authHeader = request?.headers?.get('authorization');
-  const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7).trim() : null;
+  const token = extractToken(request);
 
   if (token) {
     const { data: { user } } = await supabase.auth.getUser(token);
     if (user?.id) {
+      const userMetaTenant = user.user_metadata?.tenant_id as string | undefined;
+      if (userMetaTenant) {
+        if (requestedTenantId && requestedTenantId !== userMetaTenant) {
+          throw new Error('Tenant Authorization Forbidden: Cross-tenant operation blocked.');
+        }
+        return userMetaTenant;
+      }
+
       const { data: profile } = await supabase
         .from('users')
         .select('tenant_id')
@@ -77,23 +108,13 @@ export async function resolveAuthorizedTenantId(
     }
   }
 
-  const { data } = await supabase
-    .from('organizations')
-    .select('tenant_id')
-    .limit(1)
-    .maybeSingle();
-  const org = data as { tenant_id?: string } | null;
-
-  if (org?.tenant_id) {
-    if (requestedTenantId && requestedTenantId !== org.tenant_id) {
-      throw new Error('Tenant Authorization Forbidden: Cross-tenant operation blocked.');
+  const internalApiKey = request?.headers?.get('x-internal-api-key');
+  const expectedSecret = process.env.INTERNAL_API_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (internalApiKey && expectedSecret && internalApiKey === expectedSecret) {
+    if (requestedTenantId && requestedTenantId.trim().length > 0) {
+      return requestedTenantId.trim();
     }
-    return org.tenant_id;
   }
 
-  if (requestedTenantId && requestedTenantId.trim().length > 0) {
-    return requestedTenantId.trim();
-  }
-
-  throw new Error('Tenant ID could not be resolved from active session or database.');
+  throw new Error('Tenant Authorization Required: A valid authenticated session is required to perform this action.');
 }

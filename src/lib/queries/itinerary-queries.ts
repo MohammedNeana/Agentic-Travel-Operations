@@ -89,12 +89,17 @@ function mapProvider(db: DbExperienceProvider): ExperienceProvider {
   };
 }
 
-export async function getExperienceProviders(): Promise<ExperienceProvider[]> {
+export async function getExperienceProviders(tenantId?: string): Promise<ExperienceProvider[]> {
   const supabase = createServerSupabaseClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from('experience_providers')
-    .select('id, tenant_id, name, city, experience_type, capacity, verification_status, phone_number')
-    .order('created_at', { ascending: true });
+    .select('id, tenant_id, name, city, experience_type, capacity, verification_status, phone_number');
+
+  if (tenantId && tenantId.trim().length > 0) {
+    query = query.eq('tenant_id', tenantId.trim());
+  }
+
+  const { data, error } = await query.order('created_at', { ascending: true });
 
   if (error) {
     return [];
@@ -103,26 +108,37 @@ export async function getExperienceProviders(): Promise<ExperienceProvider[]> {
   return (data as DbExperienceProvider[]).map(mapProvider);
 }
 
-export async function getActiveItinerary(travelerId?: string): Promise<Itinerary | null> {
+export async function getActiveItinerary(
+  params?: string | { tenantId?: string; travelerId?: string }
+): Promise<Itinerary | null> {
   const supabase = createServerSupabaseClient();
+  const travelerId = typeof params === 'string' ? params : params?.travelerId;
+  const tenantId = typeof params === 'object' ? params?.tenantId : undefined;
 
   let query = supabase.from('itineraries').select('*');
-  if (travelerId) {
-    query = query.eq('traveler_profile_id', travelerId);
+  if (tenantId && tenantId.trim().length > 0) {
+    query = query.eq('tenant_id', tenantId.trim());
+  }
+  if (travelerId && travelerId.trim().length > 0) {
+    query = query.eq('traveler_profile_id', travelerId.trim());
   }
 
   let { data: itineraryData, error: itError } = await query
     .order('created_at', { ascending: true })
     .limit(1)
-    .single();
+    .maybeSingle();
 
   if ((itError || !itineraryData) && travelerId) {
-    const fallback = await supabase
+    let fallbackQuery = supabase
       .from('itineraries')
       .select('*')
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .single();
+      .order('created_at', { ascending: true });
+
+    if (tenantId && tenantId.trim().length > 0) {
+      fallbackQuery = fallbackQuery.eq('tenant_id', tenantId.trim());
+    }
+
+    const fallback = await fallbackQuery.limit(1).maybeSingle();
     itineraryData = fallback.data;
     itError = fallback.error;
   }
@@ -235,10 +251,16 @@ export async function getSmartMatchRecommendations(
       effectiveTenantId = org?.tenant_id;
     }
 
-    const { data: unindexedProviders } = await supabase
+    let unindexedQuery = supabase
       .from('experience_providers')
       .select('id, name, city, experience_type, capacity, verification_status')
       .is('embedding', null);
+
+    if (effectiveTenantId && effectiveTenantId.trim().length > 0) {
+      unindexedQuery = unindexedQuery.eq('tenant_id', effectiveTenantId.trim());
+    }
+
+    const { data: unindexedProviders } = await unindexedQuery;
 
     if (unindexedProviders && unindexedProviders.length > 0) {
       for (const p of unindexedProviders) {
@@ -249,10 +271,15 @@ export async function getSmartMatchRecommendations(
           capacity: p.capacity ?? 10,
           verification_status: p.verification_status,
         });
-        await supabase
+        let updateQuery = supabase
           .from('experience_providers')
           .update({ embedding: JSON.stringify(emb) })
           .eq('id', p.id);
+
+        if (effectiveTenantId && effectiveTenantId.trim().length > 0) {
+          updateQuery = updateQuery.eq('tenant_id', effectiveTenantId.trim());
+        }
+        await updateQuery;
       }
     }
 
@@ -271,7 +298,7 @@ export async function getSmartMatchRecommendations(
     const { data: rows, error } = await supabase.rpc('match_providers_hybrid', rpcParams);
 
     if (error) {
-      const providers = await getExperienceProviders();
+      const providers = await getExperienceProviders(effectiveTenantId);
       return providers
         .filter((p) => p.verificationStatus === 'verified')
         .slice(0, 5)
