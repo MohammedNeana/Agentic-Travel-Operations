@@ -382,13 +382,13 @@ YOUR AUTONOMOUS MISSION:
 3. DRAFT HUMAN-LIKE WHATSAPP NOTICES TO DOWNSTREAM VENDORS:
    - For every downstream vendor whose booking needs to be pushed forward:
      Draft a warm, courteous, and culturally authentic Arabic WhatsApp message written as the DMC Operations Coordinator.
-     Requirements for each downstream message:
-     * Tone: Professional, warm Saudi hospitality style ("السلام عليكم ورحمة الله، حياك الله أخوي [اسم المزود]، معك منسق العمليات في There DMC").
-     * Inform them naturally that the group experienced an unexpected delay in their previous tour/activity.
-     * State the updated estimated arrival time clearly ("نقّدر وصول الوفد لكم الساعة [الوقت الجديد] بدلاً من [الوقت الأصلي]").
-     * Respect traveler privacy: mention group nationality and size, NEVER traveler personal names.
-     * Ask politely if this updated time is suitable for them to host the delegation ("الله يسعدك هل هذا الموعد يناسبكم لاستقبالهم؟").
-     * NO bot buttons or robotic templates. Pure human-like conversational Arabic.
+      Requirements for each downstream message:
+      - Tone: Professional, warm hospitality style ("السلام عليكم ورحمة الله، حياك الله أخوي [اسم المزود]، معك منسق العمليات في There DMC").
+      - Inform them naturally that the group experienced an unexpected delay in their previous tour/activity.
+      - State the updated estimated arrival time clearly ("نقّدر وصول الوفد لكم الساعة [الوقت الجديد] بدلاً من [الوقت الأصلي]").
+      - Respect traveler privacy: mention group nationality and size, NEVER traveler personal names.
+      - Ask politely if this updated time is suitable for them to host the delegation ("الله يسعدك هل هذا الموعد يناسبكم لاستقبالهم؟").
+      - NO bot buttons or robotic templates. Pure human-like conversational Arabic.
 
 4. WRITE SYSTEM INCIDENT SUMMARY ("incidentSummary"):
    - A clear, authoritative Arabic operational log note summarizing the root cause, delay amount, schedule changes made, and downstream vendors alerted.
@@ -396,12 +396,12 @@ YOUR AUTONOMOUS MISSION:
 5. MULTILINGUAL TRAVELER / TOUR LEADER NOTIFICATION ("travelerNotification"):
    - When a delay or reschedule cascade occurs, the delegation tour leader / traveler must be notified in their NATIVE LANGUAGE based on delegation nationality: "${travelerNationality}".
    - Detect appropriate language:
-     * If Japanese / ياباني -> Japanese (日本語)
-     * If Italian / إيطالي -> Italian (Italiano)
-     * If French / فرنسي -> French (Français)
-     * If German / ألماني -> German (Deutsch)
-     * If Saudi / Arabic / عربي -> Arabic
-     * Otherwise -> English
+     - If Japanese / ياباني -> Japanese (日本語)
+     - If Italian / إيطالي -> Italian (Italiano)
+     - If French / فرنسي -> French (Français)
+     - If German / ألماني -> German (Deutsch)
+     - If Arabic / عربي -> Arabic
+     - Otherwise -> English
    - Draft a reassuring, professional update message in that language explaining the slight schedule adjustment, estimated new time, and ensuring them that their comfort and experience quality remain the top priority.
    - Include "translatedSummaryInArabic" so the DMC operations team can immediately understand the message.
 
