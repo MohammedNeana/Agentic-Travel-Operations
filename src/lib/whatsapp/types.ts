@@ -131,6 +131,7 @@ export interface CandidateGroupEvent {
   dietaryRestrictions?: string[];
   mobilityNotes?: string;
   description?: string;
+  isImmutable?: boolean;
 }
 
 export interface IntentClassificationResult {
@@ -182,10 +183,10 @@ export interface DownstreamVendorNotice {
 
 export interface TravelerLocalizedNotification {
   language: string;
-  flag: string;
-  title: string;
+  flag?: string;
+  title?: string;
   message: string;
-  translatedSummaryInArabic: string;
+  translatedSummaryInArabic?: string;
 }
 
 export interface OrchestrationDecision {
