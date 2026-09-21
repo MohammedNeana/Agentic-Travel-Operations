@@ -1,5 +1,4 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { sendWhatsAppTextMessage } from './sender';
 import {
   OrchestrationDecision,
   OrchestrationExecutionResult,
@@ -7,6 +6,7 @@ import {
   DownstreamVendorNotice,
   OutboxNoticeRecord,
 } from './types';
+import { stageOutboxNotices, dispatchPendingOutboxNotices } from './outbox';
 import { callLLMJson } from '@/lib/ai/llm-client';
 import { validateOrchestrationDecision } from '@/lib/agent/action-validator';
 import { recordAgentOperation } from '@/lib/agent/audit-log';
@@ -23,11 +23,16 @@ export async function orchestrateItineraryCascade(options: {
   const { eventId, vendorMessage } = options;
   const startTs = Date.now();
 
-  const { data: targetEvent, error: targetErr } = await supabase
+  let targetQuery = supabase
     .from('itinerary_events')
     .select('id, itinerary_id, tenant_id, event_date, start_time, end_time, title, status, sort_order, experience_provider_id')
-    .eq('id', eventId)
-    .single();
+    .eq('id', eventId);
+
+  if (options.tenantId) {
+    targetQuery = targetQuery.eq('tenant_id', options.tenantId);
+  }
+
+  const { data: targetEvent, error: targetErr } = await targetQuery.single();
 
   if (targetErr || !targetEvent) {
     return {
@@ -38,12 +43,20 @@ export async function orchestrateItineraryCascade(options: {
     };
   }
 
-  const { data: allEvents, error: allEventsErr } = await supabase
+  const tenantId = options.tenantId || targetEvent.tenant_id;
+
+  let allEventsQuery = supabase
     .from('itinerary_events')
     .select('id, itinerary_id, event_date, start_time, end_time, title, status, sort_order, experience_provider_id, escalation_reason')
     .eq('itinerary_id', targetEvent.itinerary_id)
     .eq('event_date', targetEvent.event_date)
     .order('start_time', { ascending: true });
+
+  if (tenantId) {
+    allEventsQuery = allEventsQuery.eq('tenant_id', tenantId);
+  }
+
+  const { data: allEvents, error: allEventsErr } = await allEventsQuery;
 
   if (allEventsErr || !allEvents || allEvents.length === 0) {
     return {
@@ -54,25 +67,41 @@ export async function orchestrateItineraryCascade(options: {
     };
   }
 
-  const { data: providers } = await supabase
+  let providersQuery = supabase
     .from('experience_providers')
     .select('id, name, phone_number');
 
-  const { data: itineraryData } = await supabase
+  if (tenantId) {
+    providersQuery = providersQuery.eq('tenant_id', tenantId);
+  }
+
+  const { data: providers } = await providersQuery;
+
+  let itinQuery = supabase
     .from('itineraries')
     .select('id, title, guest_count, traveler_profile_id')
-    .eq('id', targetEvent.itinerary_id)
-    .single();
+    .eq('id', targetEvent.itinerary_id);
+
+  if (tenantId) {
+    itinQuery = itinQuery.eq('tenant_id', tenantId);
+  }
+
+  const { data: itineraryData } = await itinQuery.single();
 
   let travelerNationality = 'دولي';
   let groupSize = itineraryData?.guest_count || 2;
 
   if (itineraryData?.traveler_profile_id) {
-    const { data: profileData } = await supabase
+    let profileQuery = supabase
       .from('traveler_profiles')
       .select('nationality, group_size')
-      .eq('id', itineraryData.traveler_profile_id)
-      .single();
+      .eq('id', itineraryData.traveler_profile_id);
+
+    if (tenantId) {
+      profileQuery = profileQuery.eq('tenant_id', tenantId);
+    }
+
+    const { data: profileData } = await profileQuery.single();
 
     if (profileData) {
       travelerNationality = profileData.nationality || travelerNationality;
@@ -188,10 +217,16 @@ export async function orchestrateItineraryCascade(options: {
   const validatedDecision = validation.validatedDecision;
 
   const targetIds = validatedDecision.scheduleAdjustments.map((a) => a.eventId);
-  const { data: snapshotRows } = await supabase
+  let snapshotQuery = supabase
     .from('itinerary_events')
     .select('id, start_time, end_time, status, escalation_reason, updated_at')
     .in('id', targetIds);
+
+  if (tenantId) {
+    snapshotQuery = snapshotQuery.eq('tenant_id', tenantId);
+  }
+
+  const { data: snapshotRows } = await snapshotQuery;
 
   const successfullyUpdatedIds: string[] = [];
   let updateFailed = false;
@@ -206,7 +241,7 @@ export async function orchestrateItineraryCascade(options: {
       ? `${baseReason} [${validatedDecision.travelerNotification.language}]: "${validatedDecision.travelerNotification.message}"`
       : baseReason;
 
-    const { error: updateErr } = await supabase
+    let updateQuery = supabase
       .from('itinerary_events')
       .update({
         start_time: startStr,
@@ -216,6 +251,12 @@ export async function orchestrateItineraryCascade(options: {
         updated_at: new Date().toISOString(),
       })
       .eq('id', adj.eventId);
+
+    if (tenantId) {
+      updateQuery = updateQuery.eq('tenant_id', tenantId);
+    }
+
+    const { error: updateErr } = await updateQuery;
 
     if (updateErr) {
       updateFailed = true;
@@ -229,7 +270,7 @@ export async function orchestrateItineraryCascade(options: {
     if (snapshotRows && snapshotRows.length > 0 && successfullyUpdatedIds.length > 0) {
       const rowsToRollback = snapshotRows.filter((r) => successfullyUpdatedIds.includes(r.id));
       for (const orig of rowsToRollback) {
-        await supabase
+        let rollbackQuery = supabase
           .from('itinerary_events')
           .update({
             start_time: orig.start_time,
@@ -239,6 +280,12 @@ export async function orchestrateItineraryCascade(options: {
             updated_at: orig.updated_at,
           })
           .eq('id', orig.id);
+
+        if (tenantId) {
+          rollbackQuery = rollbackQuery.eq('tenant_id', tenantId);
+        }
+
+        await rollbackQuery;
       }
     }
 
@@ -267,29 +314,18 @@ export async function orchestrateItineraryCascade(options: {
     };
   }
 
-  const outboxNotices: OutboxNoticeRecord[] = validatedDecision.downstreamNotices
+  const rawNotices = validatedDecision.downstreamNotices
     .filter((n) => n.whatsappMessage && n.whatsappMessage.trim().length > 0)
     .map((notice) => ({
-      id: crypto.randomUUID(),
       eventId: notice.eventId,
       providerName: notice.providerName,
       providerPhone: notice.providerPhone || '',
       message: notice.whatsappMessage,
-      status: 'pending',
     }));
 
-  let dispatchedNoticesCount = 0;
-  for (const item of outboxNotices) {
-    const sendRes = await sendWhatsAppTextMessage(item.providerPhone, item.message);
-    if (sendRes.success) {
-      item.status = 'dispatched';
-      item.dispatchedAt = new Date().toISOString();
-      dispatchedNoticesCount++;
-    } else {
-      item.status = 'failed';
-      item.error = sendRes.error || 'Failed to dispatch via WhatsApp Cloud API';
-    }
-  }
+  const stagedNotices = await stageOutboxNotices(supabase, rawNotices, tenantId);
+  const { dispatchedCount: dispatchedNoticesCount, updatedNotices: outboxNotices } =
+    await dispatchPendingOutboxNotices(supabase, stagedNotices);
 
   await recordAgentOperation({
     operationId: crypto.randomUUID(),

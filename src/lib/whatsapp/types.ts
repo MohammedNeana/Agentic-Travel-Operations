@@ -201,11 +201,14 @@ export interface OrchestrationDecision {
 
 export interface OutboxNoticeRecord {
   id: string;
+  tenantId?: string;
   eventId: string;
   providerName?: string;
   providerPhone: string;
   message: string;
   status: 'pending' | 'dispatched' | 'failed';
+  attempts?: number;
+  createdAt?: string;
   dispatchedAt?: string;
   error?: string;
 }
