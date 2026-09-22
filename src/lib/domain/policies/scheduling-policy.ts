@@ -21,11 +21,74 @@ export interface PolicyResult {
   violations: string[];
 }
 
-export interface SchedulingPolicy {
-  evaluate(context: PolicyEvaluationContext): PolicyResult;
+export interface PolicyRule<TContext = PolicyEvaluationContext> {
+  readonly id: string;
+  readonly name: string;
+  evaluate(context: TContext): PolicyResult;
 }
 
-export class DurationBoundsPolicy implements SchedulingPolicy {
+export type SchedulingPolicy = PolicyRule<PolicyEvaluationContext>;
+
+export class PolicyCombinator {
+  static and(ruleA: PolicyRule, ruleB: PolicyRule): PolicyRule {
+    return {
+      id: `${ruleA.id}_AND_${ruleB.id}`,
+      name: `${ruleA.name} AND ${ruleB.name}`,
+      evaluate: (ctx) => {
+        const resA = ruleA.evaluate(ctx);
+        const resB = ruleB.evaluate(ctx);
+        return {
+          passed: resA.passed && resB.passed,
+          violations: [...resA.violations, ...resB.violations],
+        };
+      },
+    };
+  }
+
+  static or(ruleA: PolicyRule, ruleB: PolicyRule): PolicyRule {
+    return {
+      id: `${ruleA.id}_OR_${ruleB.id}`,
+      name: `${ruleA.name} OR ${ruleB.name}`,
+      evaluate: (ctx) => {
+        const resA = ruleA.evaluate(ctx);
+        if (resA.passed) {
+          return { passed: true, violations: [] };
+        }
+        const resB = ruleB.evaluate(ctx);
+        if (resB.passed) {
+          return { passed: true, violations: [] };
+        }
+        return {
+          passed: false,
+          violations: [...resA.violations, ...resB.violations],
+        };
+      },
+    };
+  }
+
+  static every(rules: PolicyRule[]): PolicyRule {
+    return {
+      id: 'COMPOSITE_EVERY',
+      name: 'Composite Conjunction Rule',
+      evaluate: (ctx) => {
+        const violations: string[] = [];
+        const passed = rules.every((rule) => {
+          const res = rule.evaluate(ctx);
+          if (!res.passed) {
+            violations.push(...res.violations);
+          }
+          return res.passed;
+        });
+        return { passed: violations.length === 0, violations };
+      },
+    };
+  }
+}
+
+export class DurationBoundsPolicy implements PolicyRule {
+  readonly id = 'DURATION_BOUNDS';
+  readonly name = 'Duration Bounds Policy';
+
   evaluate(context: PolicyEvaluationContext): PolicyResult {
     const violations: string[] = [];
     const knownMap = new Map(context.knownEvents.map((e) => [e.id, e]));
@@ -60,7 +123,10 @@ export class DurationBoundsPolicy implements SchedulingPolicy {
   }
 }
 
-export class ImmutableEventPolicy implements SchedulingPolicy {
+export class ImmutableEventPolicy implements PolicyRule {
+  readonly id = 'IMMUTABLE_BOOKING';
+  readonly name = 'Immutable Booking Policy';
+
   evaluate(context: PolicyEvaluationContext): PolicyResult {
     const violations: string[] = [];
     const knownMap = new Map(context.knownEvents.map((e) => [e.id, e]));
@@ -81,7 +147,10 @@ export class ImmutableEventPolicy implements SchedulingPolicy {
   }
 }
 
-export class OperationalWindowPolicy implements SchedulingPolicy {
+export class OperationalWindowPolicy implements PolicyRule {
+  readonly id = 'OPERATIONAL_WINDOW';
+  readonly name = 'Operational Window Policy';
+
   evaluate(context: PolicyEvaluationContext): PolicyResult {
     const violations: string[] = [];
     const knownMap = new Map(context.knownEvents.map((e) => [e.id, e]));
@@ -116,7 +185,10 @@ export class OperationalWindowPolicy implements SchedulingPolicy {
   }
 }
 
-export class ShiftMagnitudePolicy implements SchedulingPolicy {
+export class ShiftMagnitudePolicy implements PolicyRule {
+  readonly id = 'SHIFT_MAGNITUDE';
+  readonly name = 'Shift Magnitude Ceiling Policy';
+
   evaluate(context: PolicyEvaluationContext): PolicyResult {
     const violations: string[] = [];
     const knownMap = new Map(context.knownEvents.map((e) => [e.id, e]));
@@ -146,7 +218,10 @@ export class ShiftMagnitudePolicy implements SchedulingPolicy {
   }
 }
 
-export class OverlapPolicy implements SchedulingPolicy {
+export class OverlapPolicy implements PolicyRule {
+  readonly id = 'SCHEDULE_OVERLAP';
+  readonly name = 'Schedule Overlap Prevention Policy';
+
   evaluate(context: PolicyEvaluationContext): PolicyResult {
     const violations: string[] = [];
     const timeline = context.effectiveTimeline;
@@ -169,7 +244,10 @@ export class OverlapPolicy implements SchedulingPolicy {
   }
 }
 
-export class TransitBufferPolicy implements SchedulingPolicy {
+export class TransitBufferPolicy implements PolicyRule {
+  readonly id = 'TRANSIT_BUFFER';
+  readonly name = 'Transit Buffer Preservation Policy';
+
   evaluate(context: PolicyEvaluationContext): PolicyResult {
     const violations: string[] = [];
     const timeline = context.effectiveTimeline;
@@ -196,33 +274,68 @@ export class TransitBufferPolicy implements SchedulingPolicy {
   }
 }
 
-export class CompositeSchedulingPolicy implements SchedulingPolicy {
-  private readonly policies: SchedulingPolicy[];
-
-  constructor(policies?: SchedulingPolicy[]) {
-    this.policies = policies || [
-      new DurationBoundsPolicy(),
-      new ImmutableEventPolicy(),
-      new OperationalWindowPolicy(),
-      new ShiftMagnitudePolicy(),
-      new OverlapPolicy(),
-      new TransitBufferPolicy(),
-    ];
-  }
+export class SchedulingPolicyEngine {
+  constructor(private readonly rules: PolicyRule[]) {}
 
   evaluate(context: PolicyEvaluationContext): PolicyResult {
     const violations: string[] = [];
-
-    for (const policy of this.policies) {
-      const res = policy.evaluate(context);
-      if (!res.passed) {
-        violations.push(...res.violations);
+    this.rules.every((rule) => {
+      const result = rule.evaluate(context);
+      if (!result.passed) {
+        violations.push(...result.violations);
       }
-    }
+      return true;
+    });
 
     return {
       passed: violations.length === 0,
       violations,
     };
+  }
+}
+
+export class SchedulingPolicyEngineBuilder {
+  private readonly rules: PolicyRule[] = [];
+
+  withRule(rule: PolicyRule): this {
+    this.rules.push(rule);
+    return this;
+  }
+
+  withDefaultRules(): this {
+    this.rules.push(
+      new DurationBoundsPolicy(),
+      new ImmutableEventPolicy(),
+      new OperationalWindowPolicy(),
+      new ShiftMagnitudePolicy(),
+      new OverlapPolicy(),
+      new TransitBufferPolicy()
+    );
+    return this;
+  }
+
+  build(): SchedulingPolicyEngine {
+    if (this.rules.length === 0) {
+      this.withDefaultRules();
+    }
+    return new SchedulingPolicyEngine(this.rules);
+  }
+}
+
+export class CompositeSchedulingPolicy implements SchedulingPolicy {
+  readonly id = 'COMPOSITE_SCHEDULING_ENGINE';
+  readonly name = 'Composite Scheduling Engine';
+  private readonly engine: SchedulingPolicyEngine;
+
+  constructor(policies?: PolicyRule[]) {
+    if (policies && policies.length > 0) {
+      this.engine = new SchedulingPolicyEngine(policies);
+    } else {
+      this.engine = new SchedulingPolicyEngineBuilder().withDefaultRules().build();
+    }
+  }
+
+  evaluate(context: PolicyEvaluationContext): PolicyResult {
+    return this.engine.evaluate(context);
   }
 }
