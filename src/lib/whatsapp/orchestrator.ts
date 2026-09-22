@@ -6,36 +6,53 @@ import {
   DownstreamVendorNotice,
   OutboxNoticeRecord,
 } from './types';
-import { stageOutboxNotices, dispatchPendingOutboxNotices } from './outbox';
-import { callLLMJson } from '@/lib/ai/llm-client';
 import { validateOrchestrationDecision } from '@/lib/agent/action-validator';
 import { recordAgentOperation } from '@/lib/agent/audit-log';
 import { AgentTracer } from '@/lib/observability/telemetry';
+import { LLMProvider } from '@/lib/ports/llm.port';
+import {
+  ItineraryRepository,
+  SupplierRepository,
+} from '@/lib/ports/repository.port';
+import { NotificationGateway } from '@/lib/ports/notification.port';
+import { GroqLLMAdapter } from '@/lib/adapters/groq-llm.adapter';
+import {
+  SupabaseItineraryRepository,
+  SupabaseSupplierRepository,
+} from '@/lib/adapters/supabase-repository.adapter';
+import { WhatsAppNotificationAdapter } from '@/lib/adapters/whatsapp-notification.adapter';
 import crypto from 'crypto';
 
-export async function orchestrateItineraryCascade(options: {
-  eventId: string;
-  vendorMessage: string;
-  senderPhone?: string;
-  triggerMessageId?: string;
-  tenantId?: string;
-}): Promise<OrchestrationExecutionResult> {
+export interface OrchestrationDependencies {
+  llmProvider?: LLMProvider;
+  itineraryRepo?: ItineraryRepository;
+  supplierRepo?: SupplierRepository;
+  notificationGateway?: NotificationGateway;
+}
+
+export async function orchestrateItineraryCascade(
+  options: {
+    eventId: string;
+    vendorMessage: string;
+    senderPhone?: string;
+    triggerMessageId?: string;
+    tenantId?: string;
+  },
+  dependencies?: OrchestrationDependencies
+): Promise<OrchestrationExecutionResult> {
   const supabase = createServerSupabaseClient();
+  const itineraryRepo = dependencies?.itineraryRepo || new SupabaseItineraryRepository(supabase);
+  const supplierRepo = dependencies?.supplierRepo || new SupabaseSupplierRepository(supabase);
+  const notificationGateway =
+    dependencies?.notificationGateway || new WhatsAppNotificationAdapter(supabase);
+  const llmProvider = dependencies?.llmProvider || new GroqLLMAdapter();
+
   const { eventId, vendorMessage } = options;
   const startTs = Date.now();
 
-  let targetQuery = supabase
-    .from('itinerary_events')
-    .select('id, itinerary_id, tenant_id, event_date, start_time, end_time, title, status, sort_order, experience_provider_id')
-    .eq('id', eventId);
+  const targetEvent = await itineraryRepo.getTargetEvent(eventId, options.tenantId);
 
-  if (options.tenantId) {
-    targetQuery = targetQuery.eq('tenant_id', options.tenantId);
-  }
-
-  const { data: targetEvent, error: targetErr } = await targetQuery.single();
-
-  if (targetErr || !targetEvent) {
+  if (!targetEvent) {
     return {
       success: false,
       updatedEventsCount: 0,
@@ -52,20 +69,13 @@ export async function orchestrateItineraryCascade(options: {
     senderPhone: options.senderPhone,
   });
 
-  let allEventsQuery = supabase
-    .from('itinerary_events')
-    .select('id, itinerary_id, event_date, start_time, end_time, title, status, sort_order, experience_provider_id, escalation_reason')
-    .eq('itinerary_id', targetEvent.itinerary_id)
-    .eq('event_date', targetEvent.event_date)
-    .order('start_time', { ascending: true });
+  const allEvents = await itineraryRepo.getDayEvents(
+    targetEvent.itinerary_id,
+    targetEvent.event_date,
+    tenantId
+  );
 
-  if (tenantId) {
-    allEventsQuery = allEventsQuery.eq('tenant_id', tenantId);
-  }
-
-  const { data: allEvents, error: allEventsErr } = await allEventsQuery;
-
-  if (allEventsErr || !allEvents || allEvents.length === 0) {
+  if (!allEvents || allEvents.length === 0) {
     return {
       success: false,
       updatedEventsCount: 0,
@@ -74,42 +84,17 @@ export async function orchestrateItineraryCascade(options: {
     };
   }
 
-  let providersQuery = supabase
-    .from('experience_providers')
-    .select('id, name, phone_number');
-
-  if (tenantId) {
-    providersQuery = providersQuery.eq('tenant_id', tenantId);
-  }
-
-  const { data: providers } = await providersQuery;
-
-  let itinQuery = supabase
-    .from('itineraries')
-    .select('id, title, guest_count, traveler_profile_id')
-    .eq('id', targetEvent.itinerary_id);
-
-  if (tenantId) {
-    itinQuery = itinQuery.eq('tenant_id', tenantId);
-  }
-
-  const { data: itineraryData } = await itinQuery.single();
+  const providers = await supplierRepo.getProviders(tenantId);
+  const itineraryData = await itineraryRepo.getItinerary(targetEvent.itinerary_id, tenantId);
 
   let travelerNationality = 'دولي';
   let groupSize = itineraryData?.guest_count || 2;
 
   if (itineraryData?.traveler_profile_id) {
-    let profileQuery = supabase
-      .from('traveler_profiles')
-      .select('nationality, group_size')
-      .eq('id', itineraryData.traveler_profile_id);
-
-    if (tenantId) {
-      profileQuery = profileQuery.eq('tenant_id', tenantId);
-    }
-
-    const { data: profileData } = await profileQuery.single();
-
+    const profileData = await itineraryRepo.getTravelerProfile(
+      itineraryData.traveler_profile_id,
+      tenantId
+    );
     if (profileData) {
       travelerNationality = profileData.nationality || travelerNationality;
       groupSize = profileData.group_size || groupSize;
@@ -119,7 +104,7 @@ export async function orchestrateItineraryCascade(options: {
   const enrichedEvents = allEvents.map((ev, index) => {
     const prov = providers?.find((p) => p.id === ev.experience_provider_id);
     const isImmutable =
-      Boolean((ev as Record<string, unknown>).is_immutable) ||
+      Boolean(ev.is_immutable) ||
       /flight|طيران|مطار|airport|border|منفذ|قطار|train/i.test(ev.title);
     return {
       order: index + 1,
@@ -142,7 +127,7 @@ export async function orchestrateItineraryCascade(options: {
   let decision: OrchestrationDecision;
   const reasoningSpan = tracer.startSpan('consult_llm_orchestrator', 'reasoning');
 
-  if (apiKey) {
+  if (dependencies?.llmProvider || apiKey) {
     try {
       decision = await consultLLMOrchestrator({
         targetEventId: targetEvent.id,
@@ -150,7 +135,7 @@ export async function orchestrateItineraryCascade(options: {
         enrichedEvents,
         travelerNationality,
         groupSize,
-        apiKey,
+        llmProvider,
         model,
       });
     } catch {
@@ -191,14 +176,13 @@ export async function orchestrateItineraryCascade(options: {
 
   if (!validation.isValid || !validation.validatedDecision) {
     const escalationReason = `AI Action Boundary Block: Schedule adjustments rejected due to domain constraint violations: ${validation.violations.join('; ')}`;
-    await supabase
-      .from('itinerary_events')
-      .update({
-        status: 'escalated',
-        escalation_reason: escalationReason,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', targetEvent.id);
+    await itineraryRepo.updateEvent({
+      id: targetEvent.id,
+      startTime: targetEvent.start_time,
+      endTime: targetEvent.end_time,
+      status: 'escalated',
+      escalationReason,
+    }, tenantId);
 
     await recordAgentOperation({
       operationId: tracer.getContext().agentRunId,
@@ -230,18 +214,8 @@ export async function orchestrateItineraryCascade(options: {
   }
 
   const validatedDecision = validation.validatedDecision;
-
   const targetIds = validatedDecision.scheduleAdjustments.map((a) => a.eventId);
-  let snapshotQuery = supabase
-    .from('itinerary_events')
-    .select('id, start_time, end_time, status, escalation_reason, updated_at')
-    .in('id', targetIds);
-
-  if (tenantId) {
-    snapshotQuery = snapshotQuery.eq('tenant_id', tenantId);
-  }
-
-  const { data: snapshotRows } = await snapshotQuery;
+  const snapshotRows = await itineraryRepo.getSnapshots(targetIds, tenantId);
 
   const successfullyUpdatedIds: string[] = [];
   let updateFailed = false;
@@ -257,26 +231,17 @@ export async function orchestrateItineraryCascade(options: {
       ? `${baseReason} [${validatedDecision.travelerNotification.language}]: "${validatedDecision.travelerNotification.message}"`
       : baseReason;
 
-    let updateQuery = supabase
-      .from('itinerary_events')
-      .update({
-        start_time: startStr,
-        end_time: endStr,
-        status: adj.newStatus || 'escalated',
-        escalation_reason: fullReason,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', adj.eventId);
+    const ok = await itineraryRepo.updateEvent({
+      id: adj.eventId,
+      startTime: startStr,
+      endTime: endStr,
+      status: adj.newStatus || 'escalated',
+      escalationReason: fullReason,
+    }, tenantId);
 
-    if (tenantId) {
-      updateQuery = updateQuery.eq('tenant_id', tenantId);
-    }
-
-    const { error: updateErr } = await updateQuery;
-
-    if (updateErr) {
+    if (!ok) {
       updateFailed = true;
-      updateErrorMessage = updateErr.message;
+      updateErrorMessage = `Failed to update event ${adj.eventId}`;
       break;
     }
     successfullyUpdatedIds.push(adj.eventId);
@@ -287,22 +252,7 @@ export async function orchestrateItineraryCascade(options: {
     if (snapshotRows && snapshotRows.length > 0 && successfullyUpdatedIds.length > 0) {
       const rowsToRollback = snapshotRows.filter((r) => successfullyUpdatedIds.includes(r.id));
       for (const orig of rowsToRollback) {
-        let rollbackQuery = supabase
-          .from('itinerary_events')
-          .update({
-            start_time: orig.start_time,
-            end_time: orig.end_time,
-            status: orig.status,
-            escalation_reason: orig.escalation_reason,
-            updated_at: orig.updated_at,
-          })
-          .eq('id', orig.id);
-
-        if (tenantId) {
-          rollbackQuery = rollbackQuery.eq('tenant_id', tenantId);
-        }
-
-        await rollbackQuery;
+        await itineraryRepo.rollbackEvent(orig, tenantId);
       }
     }
 
@@ -345,9 +295,9 @@ export async function orchestrateItineraryCascade(options: {
     }));
 
   const notificationSpan = tracer.startSpan('dispatch_downstream_notices', 'notification');
-  const stagedNotices = await stageOutboxNotices(supabase, rawNotices, tenantId);
+  const stagedNotices = await notificationGateway.stageOutbox(rawNotices, tenantId);
   const { dispatchedCount: dispatchedNoticesCount, updatedNotices: outboxNotices } =
-    await dispatchPendingOutboxNotices(supabase, stagedNotices);
+    await notificationGateway.dispatchOutbox(stagedNotices);
   tracer.endSpan(notificationSpan, { dispatchedCount: dispatchedNoticesCount });
 
   await recordAgentOperation({
@@ -381,7 +331,19 @@ export async function orchestrateItineraryCascade(options: {
     dispatchedNoticesCount,
     incidentSummary: validatedDecision.incidentSummary,
     travelerNotification: validatedDecision.travelerNotification,
-    outboxNotices,
+    outboxNotices: outboxNotices.map((n) => ({
+      id: n.id,
+      tenantId: n.tenantId,
+      eventId: n.eventId,
+      providerName: n.providerName,
+      providerPhone: n.providerPhone,
+      message: n.message,
+      status: n.status,
+      attempts: n.attempts,
+      createdAt: n.createdAt,
+      dispatchedAt: n.dispatchedAt,
+      error: n.error,
+    })),
   };
 }
 
@@ -402,10 +364,10 @@ async function consultLLMOrchestrator(params: {
   }>;
   travelerNationality: string;
   groupSize: number;
-  apiKey: string;
-  model: string;
+  llmProvider: LLMProvider;
+  model?: string;
 }): Promise<OrchestrationDecision> {
-  const { targetEventId, vendorMessage, enrichedEvents, travelerNationality, groupSize } = params;
+  const { targetEventId, vendorMessage, enrichedEvents, travelerNationality, groupSize, llmProvider } = params;
 
   const targetEvent = enrichedEvents.find((e) => e.eventId === targetEventId);
 
@@ -421,7 +383,7 @@ async function consultLLMOrchestrator(params: {
     })
     .join('\n\n');
 
-  const systemPrompt = `You are the Senior AI Operations Director & Dispatch Orchestrator for a premier Saudi Destination Management Company (DMC).
+  const systemPrompt = `You are the Senior AI Operations Director & Dispatch Orchestrator for a premier Destination Management Company (DMC).
 You operate with autonomous operational intelligence to manage trip schedules, resolve vendor delays, eliminate schedule conflicts, and coordinate downstream vendors.
 
 You receive an operational WhatsApp message (text or voice transcription) from a provider regarding an activity in an active itinerary.
@@ -448,54 +410,48 @@ YOUR AUTONOMOUS MISSION:
       - Inform them naturally that the group experienced an unexpected delay in their previous tour/activity.
       - State the updated estimated arrival time clearly ("نقّدر وصول الوفد لكم الساعة [الوقت الجديد] بدلاً من [الوقت الأصلي]").
       - Respect traveler privacy: mention group nationality and size, NEVER traveler personal names.
-      - Ask politely if this updated time is suitable for them to host the delegation ("الله يسعدك هل هذا الموعد يناسبكم لاستقبالهم؟").
-      - NO bot buttons or robotic templates. Pure human-like conversational Arabic.
+      - Include direct coordination assurance ("نعتذر عن أي إرباك ونقدّر مرونتكم العالية معنا، وسيتم احتساب أي تكاليف إضافية إن وُجدت").
 
-4. WRITE SYSTEM INCIDENT SUMMARY ("incidentSummary"):
-   - A clear, authoritative Arabic operational log note summarizing the root cause, delay amount, schedule changes made, and downstream vendors alerted.
+4. DRAFT TRAVELER MULTILINGUAL NOTIFICATION:
+   - Draft a reassuring notification directed to the travelers in their native language based on their nationality (${travelerNationality}):
+     * If German: German ("Sehr geehrte Gäste...")
+     * If Italian: Italian ("Gentili ospiti...")
+     * If French: French ("Chers invités...")
+     * If Japanese: Japanese ("お客様へ...")
+     * If British / American / International: English ("Dear Valued Guests...")
+     * If Arab: Formal Arabic ("ضيوفنا الكرام...")
+   - Always provide "translatedSummaryInArabic" alongside it for internal DMC records.
 
-5. MULTILINGUAL TRAVELER / TOUR LEADER NOTIFICATION ("travelerNotification"):
-   - When a delay or reschedule cascade occurs, the delegation tour leader / traveler must be notified in their NATIVE LANGUAGE based on delegation nationality: "${travelerNationality}".
-   - Detect appropriate language:
-     - If Japanese / ياباني -> Japanese (日本語)
-     - If Italian / إيطالي -> Italian (Italiano)
-     - If French / فرنسي -> French (Français)
-     - If German / ألماني -> German (Deutsch)
-     - If Arabic / عربي -> Arabic
-     - Otherwise -> English
-   - Draft a reassuring, professional update message in that language explaining the slight schedule adjustment, estimated new time, and ensuring them that their comfort and experience quality remain the top priority.
-   - Include "translatedSummaryInArabic" so the DMC operations team can immediately understand the message.
-
-Respond ONLY with valid JSON in this exact structure:
+Respond ONLY with a valid JSON object matching this schema:
 {
   "delayMinutes": 120,
-  "incidentType": "delay",
+  "incidentType": "delay" | "breakdown" | "traffic" | "weather" | "general",
   "isCascadeImpact": true,
-  "incidentSummary": "Arabic summary of what happened, time shifted, and actions taken",
+  "incidentSummary": "ملخص تنفيذي بالعربية يوضح سبب التأخير والإجراءات المتخذة لإعادة جدولة اليوم بدون تضارب...",
   "scheduleAdjustments": [
     {
-      "eventId": "event-id-string",
-      "eventTitle": "Title",
+      "eventId": "uuid-here",
+      "eventTitle": "عنوان الفعالية",
       "previousStartTime": "14:00",
       "previousEndTime": "17:00",
       "newStartTime": "16:00",
       "newEndTime": "19:00",
       "newStatus": "escalated",
-      "reason": "تأخير ساعتين في بدء الجولة وإشعار المزود"
+      "reason": "تأخير ساعتين في الفعالية السابقة أدى لترحيل الموعد لضمان عدم التضارب"
     }
   ],
   "downstreamNotices": [
     {
-      "eventId": "next-event-id-string",
-      "providerName": "اسم المزود التالي",
-      "providerPhone": "05xxxxxxxx",
+      "eventId": "downstream-event-uuid",
+      "providerName": "اسم المزود المتأثر",
+      "providerPhone": "رقم الهاتف أو فارغ",
       "newStartTime": "19:30",
-      "whatsappMessage": "نص رسالة الواتساب البشرية الدافئة للمزود التالي..."
+      "whatsappMessage": "السلام عليكم ورحمة الله، حياك الله أخوي..."
     }
   ],
   "travelerNotification": {
-    "language": "Japanese (日本語)",
-    "flag": "JP",
+    "language": "German",
+    "flag": "🇩🇪",
     "title": "Tour Schedule Update",
     "message": "Localized message in traveler native language...",
     "translatedSummaryInArabic": "الملخص بالعربية لمنسق الرحلة..."
@@ -509,7 +465,7 @@ Respond ONLY with valid JSON in this exact structure:
 جدول الرحلة الكامل لهذا اليوم:
 ${scheduleDescription}`;
 
-  const result = await callLLMJson<OrchestrationDecision>({
+  const result = await llmProvider.generateJson<OrchestrationDecision>({
     systemPrompt,
     userPrompt,
     temperature: 0.1,
@@ -554,122 +510,131 @@ function fallbackOrchestrationDecision(params: {
   const { targetEvent, allEvents, vendorMessage, travelerNationality, groupSize } = params;
 
   let delayMinutes = 60;
-  const normMsg = vendorMessage.toLowerCase();
-  if (normMsg.includes('ساعتين') || normMsg.includes('2 ساعة') || normMsg.includes('ساعتان') || normMsg.includes('2 hours')) {
+  const numMatch = vendorMessage.match(/(\d+)\s*(دقيقة|ساعة|ساعات|دقايق|h|hr|min|hours?|mins?)/i);
+  if (numMatch) {
+    const val = parseInt(numMatch[1], 10);
+    const unit = numMatch[2].toLowerCase();
+    if (unit.startsWith('ساع') || unit.startsWith('h')) {
+      delayMinutes = val * 60;
+    } else {
+      delayMinutes = val;
+    }
+  } else if (/ساعتين/i.test(vendorMessage)) {
     delayMinutes = 120;
-  } else if (normMsg.includes('ثلاث ساعات') || normMsg.includes('3 ساعات')) {
-    delayMinutes = 180;
-  } else if (normMsg.includes('نصف ساعة') || normMsg.includes('نص ساعة') || normMsg.includes('30 دقيقة')) {
+  } else if (/نص ساعة|نصف ساعة/i.test(vendorMessage)) {
     delayMinutes = 30;
   }
 
-  const addMinutesToTime = (timeStr: string, mins: number): string => {
-    const [h, m] = timeStr.split(':').map((v) => parseInt(v, 10));
-    const totalMins = (h || 0) * 60 + (m || 0) + mins;
-    const newH = Math.floor(totalMins / 60) % 24;
-    const newM = totalMins % 60;
+  function addMinutesToTime(timeStr: string, mins: number): string {
+    const parts = (timeStr || '10:00').split(':').map((v) => parseInt(v, 10));
+    const total = (isNaN(parts[0]) ? 10 : parts[0]) * 60 + (isNaN(parts[1]) ? 0 : parts[1]) + mins;
+    const capped = Math.min(total, 23 * 60 + 45);
+    const newH = Math.floor(capped / 60);
+    const newM = capped % 60;
     return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
-  };
+  }
+
+  function parseToMins(t: string): number {
+    const p = (t || '00:00').split(':').map((x) => parseInt(x, 10));
+    return (isNaN(p[0]) ? 0 : p[0]) * 60 + (isNaN(p[1]) ? 0 : p[1]);
+  }
 
   const scheduleAdjustments: ScheduleAdjustment[] = [];
   const downstreamNotices: DownstreamVendorNotice[] = [];
 
-  const targetIdx = allEvents.findIndex((e) => e.eventId === targetEvent.id);
-  const currentTarget = allEvents[targetIdx] || allEvents[0];
-
-  const newTargetStart = addMinutesToTime(currentTarget.startTime, delayMinutes);
-  const newTargetEnd = addMinutesToTime(currentTarget.endTime, delayMinutes);
+  const targetNewStart = addMinutesToTime(targetEvent.start_time, delayMinutes);
+  const targetNewEnd = addMinutesToTime(targetEvent.end_time, delayMinutes);
 
   scheduleAdjustments.push({
-    eventId: currentTarget.eventId,
-    eventTitle: currentTarget.title,
-    previousStartTime: currentTarget.startTime,
-    previousEndTime: currentTarget.endTime,
-    newStartTime: newTargetStart,
-    newEndTime: newTargetEnd,
+    eventId: targetEvent.id,
+    eventTitle: targetEvent.title,
+    previousStartTime: targetEvent.start_time ? targetEvent.start_time.substring(0, 5) : '10:00',
+    previousEndTime: targetEvent.end_time ? targetEvent.end_time.substring(0, 5) : '13:00',
+    newStartTime: targetNewStart,
+    newEndTime: targetNewEnd,
     newStatus: 'escalated',
-    reason: `تأخير يقدر بـ ${delayMinutes} دقيقة بناءً على إفادة المزود: "${vendorMessage}"`,
+    reason: `تأخير تشغيلي قدره ${delayMinutes} دقيقة بناءً على بلاغ المزود عبر واتساب.`,
   });
 
-  let prevEndTime = newTargetEnd;
-  let isCascadeImpact = false;
+  const subsequentEvents = allEvents.filter((e) => !e.isTargetEvent && e.order > 1);
+  let lastEndTimeMins = parseToMins(targetNewEnd);
+  let isCascade = false;
 
-  for (let i = targetIdx + 1; i < allEvents.length; i++) {
-    const nextEv = allEvents[i];
-    if (nextEv.date && currentTarget.date && nextEv.date !== currentTarget.date) {
-      continue;
-    }
-    const [prevH, prevM] = prevEndTime.split(':').map((v) => parseInt(v, 10));
-    const prevTotal = prevH * 60 + prevM + 30;
+  for (const sub of subsequentEvents) {
+    const origStartMins = parseToMins(sub.startTime);
+    const origEndMins = parseToMins(sub.endTime);
+    const duration = origEndMins - origStartMins;
+    const minBuffer = 30;
 
-    const [nextH, nextM] = nextEv.startTime.split(':').map((v) => parseInt(v, 10));
-    const nextTotal = nextH * 60 + nextM;
+    if (lastEndTimeMins + minBuffer > origStartMins) {
+      isCascade = true;
+      const newStartMins = lastEndTimeMins + minBuffer;
+      const newEndMins = newStartMins + (duration > 0 ? duration : 120);
 
-    if (prevTotal > nextTotal) {
-      isCascadeImpact = true;
-      const shiftMins = prevTotal - nextTotal;
-      const adjustedStart = addMinutesToTime(nextEv.startTime, shiftMins);
-      const adjustedEnd = addMinutesToTime(nextEv.endTime, shiftMins);
+      const toTimeStr = (totalMins: number) => {
+        const capped = Math.min(totalMins, 23 * 60 + 45);
+        const h = Math.floor(capped / 60);
+        const m = capped % 60;
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      };
+
+      const adjustedStart = toTimeStr(newStartMins);
+      const adjustedEnd = toTimeStr(newEndMins);
 
       scheduleAdjustments.push({
-        eventId: nextEv.eventId,
-        eventTitle: nextEv.title,
-        previousStartTime: nextEv.startTime,
-        previousEndTime: nextEv.endTime,
+        eventId: sub.eventId,
+        eventTitle: sub.title,
+        previousStartTime: sub.startTime,
+        previousEndTime: sub.endTime,
         newStartTime: adjustedStart,
         newEndTime: adjustedEnd,
         newStatus: 'escalated',
-        reason: `ترحيل تلقائي للموعد (${adjustedStart}) لتفادي التضارب مع الفعالية السابقة المتأخرة.`,
+        reason: `ترحيل وقائي لتفادي التضارب مع الفعالية السابقة مع ضمان وقت تنقل لا يقل عن ${minBuffer} دقيقة.`,
       });
 
       downstreamNotices.push({
-        eventId: nextEv.eventId,
-        providerName: nextEv.providerName,
-        providerPhone: nextEv.providerPhone,
+        eventId: sub.eventId,
+        providerName: sub.providerName,
+        providerPhone: sub.providerPhone,
         newStartTime: adjustedStart,
-        whatsappMessage: `السلام عليكم ورحمة الله، حياك الله أخوي ${nextEv.providerName}\n\nمعك منسق العمليات في There DMC.\nحابين نبلغكم بخصوص حجز وفد (${travelerNationality}) عددهم ${groupSize} أشخاص اليوم، صار في تأخير خارج عن الإرادة في الجولة السابقة، وبناءً عليه نقدر وصول الوفد لكم الساعة ${adjustedStart} بدلاً من ${nextEv.startTime}.\n\nالله يسعدك ودنا نتأكد هل هذا التوقيت مناسب وجاهزيتكم لاستقبالهم؟\nشاكرين ومقدرين تعاونكم الدائم`,
+        whatsappMessage: `السلام عليكم ورحمة الله، حياك الله أخوي ${sub.providerName}، معك منسق العمليات في There DMC. نود إبلاغكم بأن الوفد (${travelerNationality} - عدد ${groupSize} أشخاص) واجه تأخيراً في جولته السابقة. يرجى التكرم بتأجيل الموعد ليكون وصولهم المتوقع عند الساعة ${adjustedStart} بإذن الله. نعتذر عن أي إرباك ونقدّر مرونتكم العالية معنا، وسيتم احتساب أي تكاليف إضافية إن وُجدت.`,
       });
 
-      prevEndTime = adjustedEnd;
+      lastEndTimeMins = newEndMins;
     }
   }
 
-  const incidentSummary = `رصد تأخير قدره ${delayMinutes} دقيقة في تجربة "${currentTarget.title}". قام النظام الذكي بترحيل المواعيد اللاحقة وإشعار ${downstreamNotices.length} مزودين تالين عبر الواتساب لتفادي أي تضارب.`;
+  let travelerLanguage = 'English';
+  let flag = '🇬🇧';
+  let travelerMsg = `Dear Guests, please note your tour today has been adjusted by ${delayMinutes} minutes due to unexpected traffic. We are actively coordinating with your upcoming guides to ensure a seamless experience.`;
 
-  const isJapanese = travelerNationality.includes('يابان') || travelerNationality.toLowerCase().includes('japan');
-  const isItalian = travelerNationality.includes('إيطال') || travelerNationality.toLowerCase().includes('ital');
-
-  const travelerNotification = isJapanese
-    ? {
-        language: 'Japanese (日本語)',
-        flag: 'JP',
-        title: 'ツアースケジュール更新のお知らせ',
-        message: `お客様各位、前後の観光行程の都合により、本日のツアー開始時刻が ${newTargetStart} に変更となりました。ご不便をおかけしますが、最高の体験をお届けできるよう準備しております。何卒よろしくお願い申し上げます。`,
-        translatedSummaryInArabic: `إشعار باليابانية: تم إبلاغ الوفد بترحيل موعد الجولة إلى ${newTargetStart} مع التأكيد على سلامتهم وراحتهم.`,
-      }
-    : isItalian
-    ? {
-        language: 'Italian (Italiano)',
-        flag: 'IT',
-        title: 'Aggiornamento Orario Itinerario',
-        message: `Gentili ospiti, a causa di un lieve ritardo nell'attività precedente, il nuovo orario di inizio è previsto per le ${newTargetStart}. Ci scusiamo per l'inconveniente e vi ringraziamo per la comprensione.`,
-        translatedSummaryInArabic: `إشعار بالإيطالية: تم إبلاغ الوفد بترحيل موعد الجولة إلى ${newTargetStart} مع الاعتذار والشكر لتفهمهم.`,
-      }
-    : {
-        language: 'English',
-        flag: 'EN',
-        title: 'Schedule Update Notification',
-        message: `Dear Guests, due to a minor delay in the previous experience, your upcoming activity will now commence at ${newTargetStart}. We appreciate your patience and look forward to delivering a wonderful experience.`,
-        translatedSummaryInArabic: `إشعار بالإنجليزية: تم إبلاغ الوفد بترحيل الموعد إلى ${newTargetStart}.`,
-      };
+  if (/german|ألمان|germany/i.test(travelerNationality)) {
+    travelerLanguage = 'German';
+    flag = '🇩🇪';
+    travelerMsg = `Sehr geehrte Gäste, bitte beachten Sie, dass Ihr Tagesprogramm verkehrsbedingt um ${delayMinutes} Minuten verschoben wurde. Wir koordinieren alle weiteren Stationen für Sie.`;
+  } else if (/italian|إيطال|italy/i.test(travelerNationality)) {
+    travelerLanguage = 'Italian';
+    flag = '🇮🇹';
+    travelerMsg = `Gentili ospiti, vi informiamo che il programma di oggi ha subito un ritardo di ${delayMinutes} minuti per motivi di traffico. Abbiamo già riorganizzato le tappe successive.`;
+  } else if (/french|فرنس/i.test(travelerNationality)) {
+    travelerLanguage = 'French';
+    flag = '🇫🇷';
+    travelerMsg = `Chers invités, votre programme d'aujourd'hui a été décalé de ${delayMinutes} minutes en raison de la circulation. Nous réorganisons les prochaines étapes sans attente.`;
+  }
 
   return {
     delayMinutes,
     incidentType: 'delay',
-    isCascadeImpact,
-    incidentSummary,
+    isCascadeImpact: isCascade,
+    incidentSummary: `تأخير تشغيلي (${delayMinutes} دقيقة) في "${targetEvent.title}". تم تنفيذ حل وقائي ${isCascade ? 'وترحيل الفعاليات اللاحقة لتفادي أي تداخل' : 'بدون تأثير على باقي الفعاليات'}.`,
     scheduleAdjustments,
     downstreamNotices,
-    travelerNotification,
+    travelerNotification: {
+      language: travelerLanguage,
+      flag,
+      title: 'Schedule Update',
+      message: travelerMsg,
+      translatedSummaryInArabic: `إشعار الضيوف بلغتهم (${travelerLanguage}) بتأخير ${delayMinutes} دقيقة مع تأكيد سير باقي اليوم بانتظام.`,
+    },
   };
 }
