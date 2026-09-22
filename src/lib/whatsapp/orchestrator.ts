@@ -10,6 +10,7 @@ import { stageOutboxNotices, dispatchPendingOutboxNotices } from './outbox';
 import { callLLMJson } from '@/lib/ai/llm-client';
 import { validateOrchestrationDecision } from '@/lib/agent/action-validator';
 import { recordAgentOperation } from '@/lib/agent/audit-log';
+import { AgentTracer } from '@/lib/observability/telemetry';
 import crypto from 'crypto';
 
 export async function orchestrateItineraryCascade(options: {
@@ -44,6 +45,12 @@ export async function orchestrateItineraryCascade(options: {
   }
 
   const tenantId = options.tenantId || targetEvent.tenant_id;
+
+  const tracer = new AgentTracer({
+    tenantId,
+    triggerMessageId: options.triggerMessageId,
+    senderPhone: options.senderPhone,
+  });
 
   let allEventsQuery = supabase
     .from('itinerary_events')
@@ -133,6 +140,7 @@ export async function orchestrateItineraryCascade(options: {
   const model = process.env.GROQ_LLM_MODEL || 'llama-3.3-70b-versatile';
 
   let decision: OrchestrationDecision;
+  const reasoningSpan = tracer.startSpan('consult_llm_orchestrator', 'reasoning');
 
   if (apiKey) {
     try {
@@ -163,7 +171,9 @@ export async function orchestrateItineraryCascade(options: {
       groupSize,
     });
   }
+  tracer.endSpan(reasoningSpan, { model, isCascade: decision.isCascadeImpact });
 
+  const validationSpan = tracer.startSpan('validate_orchestration_decision', 'validation');
   const validation = validateOrchestrationDecision(decision, {
     targetEventDate: targetEvent.event_date,
     knownEvents: enrichedEvents.map((e) => ({
@@ -177,6 +187,7 @@ export async function orchestrateItineraryCascade(options: {
     })),
     minTransitBufferMinutes: 30,
   });
+  tracer.endSpan(validationSpan, { isValid: validation.isValid, violationCount: validation.violations.length });
 
   if (!validation.isValid || !validation.validatedDecision) {
     const escalationReason = `AI Action Boundary Block: Schedule adjustments rejected due to domain constraint violations: ${validation.violations.join('; ')}`;
@@ -190,7 +201,7 @@ export async function orchestrateItineraryCascade(options: {
       .eq('id', targetEvent.id);
 
     await recordAgentOperation({
-      operationId: crypto.randomUUID(),
+      operationId: tracer.getContext().agentRunId,
       operationType: 'action_boundary_block',
       tenantId: options.tenantId || targetEvent.tenant_id,
       itineraryId: targetEvent.itinerary_id,
@@ -198,10 +209,14 @@ export async function orchestrateItineraryCascade(options: {
       triggerMessageId: options.triggerMessageId,
       senderPhone: options.senderPhone,
       llmModel: model,
-      latencyMs: Date.now() - startTs,
+      latencyMs: tracer.getTotalDurationMs(),
       rationale: vendorMessage,
       validationStatus: 'rejected',
       violations: validation.violations,
+      metadata: {
+        traceId: tracer.getContext().traceId,
+        spans: tracer.getSpans(),
+      },
     });
 
     return {
@@ -232,6 +247,7 @@ export async function orchestrateItineraryCascade(options: {
   let updateFailed = false;
   let updateErrorMessage = '';
 
+  const mutationSpan = tracer.startSpan('mutate_itinerary_events', 'mutation');
   for (const adj of validatedDecision.scheduleAdjustments) {
     const startStr = adj.newStartTime.length === 5 ? `${adj.newStartTime}:00` : adj.newStartTime;
     const endStr = adj.newEndTime.length === 5 ? `${adj.newEndTime}:00` : adj.newEndTime;
@@ -265,6 +281,7 @@ export async function orchestrateItineraryCascade(options: {
     }
     successfullyUpdatedIds.push(adj.eventId);
   }
+  tracer.endSpan(mutationSpan, { updatedCount: successfullyUpdatedIds.length, failed: updateFailed });
 
   if (updateFailed) {
     if (snapshotRows && snapshotRows.length > 0 && successfullyUpdatedIds.length > 0) {
@@ -290,7 +307,7 @@ export async function orchestrateItineraryCascade(options: {
     }
 
     await recordAgentOperation({
-      operationId: crypto.randomUUID(),
+      operationId: tracer.getContext().agentRunId,
       operationType: 'transaction_rollback',
       tenantId: options.tenantId || targetEvent.tenant_id,
       itineraryId: targetEvent.itinerary_id,
@@ -298,10 +315,14 @@ export async function orchestrateItineraryCascade(options: {
       triggerMessageId: options.triggerMessageId,
       senderPhone: options.senderPhone,
       llmModel: model,
-      latencyMs: Date.now() - startTs,
+      latencyMs: tracer.getTotalDurationMs(),
       rationale: `Atomic transaction rollback: ${updateErrorMessage}`,
       validationStatus: 'rejected',
       violations: [`Database Update Failure: ${updateErrorMessage}`],
+      metadata: {
+        traceId: tracer.getContext().traceId,
+        spans: tracer.getSpans(),
+      },
     });
 
     return {
@@ -323,12 +344,14 @@ export async function orchestrateItineraryCascade(options: {
       message: notice.whatsappMessage,
     }));
 
+  const notificationSpan = tracer.startSpan('dispatch_downstream_notices', 'notification');
   const stagedNotices = await stageOutboxNotices(supabase, rawNotices, tenantId);
   const { dispatchedCount: dispatchedNoticesCount, updatedNotices: outboxNotices } =
     await dispatchPendingOutboxNotices(supabase, stagedNotices);
+  tracer.endSpan(notificationSpan, { dispatchedCount: dispatchedNoticesCount });
 
   await recordAgentOperation({
-    operationId: crypto.randomUUID(),
+    operationId: tracer.getContext().agentRunId,
     operationType: 'schedule_cascade',
     tenantId: options.tenantId || targetEvent.tenant_id,
     itineraryId: targetEvent.itinerary_id,
@@ -336,10 +359,12 @@ export async function orchestrateItineraryCascade(options: {
     triggerMessageId: options.triggerMessageId,
     senderPhone: options.senderPhone,
     llmModel: model,
-    latencyMs: Date.now() - startTs,
+    latencyMs: tracer.getTotalDurationMs(),
     rationale: validatedDecision.incidentSummary,
     validationStatus: 'passed',
     metadata: {
+      traceId: tracer.getContext().traceId,
+      spans: tracer.getSpans(),
       delayMinutes: validatedDecision.delayMinutes,
       updatedEventsCount: successfullyUpdatedIds.length,
       dispatchedNoticesCount,
