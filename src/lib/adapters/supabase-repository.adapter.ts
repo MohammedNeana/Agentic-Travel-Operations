@@ -8,7 +8,12 @@ import {
   ExperienceProviderRecord,
   EventUpdatePayload,
   EventSnapshotRecord,
+  AtomicCascadeParams,
+  AtomicCascadeResult,
 } from '../ports/repository.port';
+import { stageOutboxNotices } from '../whatsapp/outbox';
+import { recordAgentOperation } from '../agent/audit-log';
+import { OutboxRecord } from '../ports/notification.port';
 
 export class SupabaseItineraryRepository implements ItineraryRepository {
   constructor(private readonly supabase: SupabaseClient) {}
@@ -123,6 +128,138 @@ export class SupabaseItineraryRepository implements ItineraryRepository {
       query = query.eq('tenant_id', tenantId);
     }
     await query;
+  }
+
+  async executeAtomicCascade(params: AtomicCascadeParams): Promise<AtomicCascadeResult> {
+    if (typeof (this.supabase as any).rpc === 'function') {
+      try {
+        const { data, error } = await this.supabase.rpc('execute_itinerary_atomic_cascade', {
+          p_tenant_id: params.tenantId,
+          p_adjustments: params.adjustments,
+          p_outbox_notices: params.outboxNotices,
+          p_audit_entry: params.auditEntry,
+        });
+        if (!error && data && data.success) {
+          return {
+            success: true,
+            updatedEventsCount: data.updated_count || params.adjustments.length,
+            stagedOutboxNotices: (data.staged_notices || []).map((n: any) => ({
+              id: n.id,
+              tenantId: n.tenant_id,
+              eventId: n.event_id,
+              providerName: n.provider_name,
+              providerPhone: n.recipient_phone,
+              message: n.message_payload,
+              status: n.status,
+              attempts: n.attempts,
+              createdAt: n.created_at,
+              dispatchedAt: n.dispatched_at,
+              error: n.error,
+            })),
+          };
+        }
+      } catch {}
+    }
+
+    const targetIds = params.adjustments.map((a) => a.eventId);
+    const snapshots = await this.getSnapshots(targetIds, params.tenantId);
+
+    const successfullyUpdated: string[] = [];
+    let failureReason = '';
+
+    for (const adj of params.adjustments) {
+      const ok = await this.updateEvent(
+        {
+          id: adj.eventId,
+          startTime: adj.startTime,
+          endTime: adj.endTime,
+          status: adj.status,
+          escalationReason: adj.escalationReason,
+        },
+        params.tenantId
+      );
+
+      if (!ok) {
+        failureReason = `Failed to update event ${adj.eventId}`;
+        break;
+      }
+      successfullyUpdated.push(adj.eventId);
+    }
+
+    if (failureReason) {
+      const toRevert = snapshots.filter((s) => successfullyUpdated.includes(s.id));
+      for (const snap of toRevert) {
+        await this.rollbackEvent(snap, params.tenantId);
+      }
+      return {
+        success: false,
+        updatedEventsCount: 0,
+        stagedOutboxNotices: [],
+        error: failureReason,
+      };
+    }
+
+    let stagedNotices: OutboxRecord[] = [];
+    try {
+      const outboxRaw = await stageOutboxNotices(
+        this.supabase,
+        params.outboxNotices.map((n) => ({
+          eventId: n.eventId,
+          providerName: n.providerName,
+          providerPhone: n.providerPhone,
+          message: n.message,
+        })),
+        params.tenantId
+      );
+
+      stagedNotices = outboxRaw.map((n) => ({
+        id: n.id,
+        tenantId: n.tenantId,
+        eventId: n.eventId,
+        providerName: n.providerName,
+        providerPhone: n.providerPhone,
+        message: n.message,
+        status: n.status,
+        attempts: n.attempts,
+        createdAt: n.createdAt,
+        dispatchedAt: n.dispatchedAt,
+        error: n.error,
+      }));
+    } catch (err) {
+      failureReason = `Outbox staging failure: ${err instanceof Error ? err.message : String(err)}`;
+      const toRevert = snapshots.filter((s) => successfullyUpdated.includes(s.id));
+      for (const snap of toRevert) {
+        await this.rollbackEvent(snap, params.tenantId);
+      }
+      return {
+        success: false,
+        updatedEventsCount: 0,
+        stagedOutboxNotices: [],
+        error: failureReason,
+      };
+    }
+
+    try {
+      await recordAgentOperation(params.auditEntry);
+    } catch (err) {
+      failureReason = `Audit persistence failure: ${err instanceof Error ? err.message : String(err)}`;
+      const toRevert = snapshots.filter((s) => successfullyUpdated.includes(s.id));
+      for (const snap of toRevert) {
+        await this.rollbackEvent(snap, params.tenantId);
+      }
+      return {
+        success: false,
+        updatedEventsCount: 0,
+        stagedOutboxNotices: [],
+        error: failureReason,
+      };
+    }
+
+    return {
+      success: true,
+      updatedEventsCount: successfullyUpdated.length,
+      stagedOutboxNotices: stagedNotices,
+    };
   }
 }
 

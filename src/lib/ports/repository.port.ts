@@ -1,3 +1,6 @@
+import { OutboxRecord } from './notification.port';
+import { AgentAuditEntry } from '../agent/audit-log';
+
 export interface ItineraryEventRecord {
   id: string;
   itinerary_id: string;
@@ -58,6 +61,35 @@ export interface EventSnapshotRecord {
   updated_at?: string;
 }
 
+export interface AtomicCascadeAdjustment {
+  eventId: string;
+  startTime: string;
+  endTime: string;
+  status: string;
+  escalationReason?: string;
+}
+
+export interface AtomicCascadeOutboxNotice {
+  eventId: string;
+  providerName?: string;
+  providerPhone: string;
+  message: string;
+}
+
+export interface AtomicCascadeParams {
+  tenantId: string;
+  adjustments: AtomicCascadeAdjustment[];
+  outboxNotices: AtomicCascadeOutboxNotice[];
+  auditEntry: AgentAuditEntry;
+}
+
+export interface AtomicCascadeResult {
+  success: boolean;
+  updatedEventsCount: number;
+  stagedOutboxNotices: OutboxRecord[];
+  error?: string;
+}
+
 export interface ItineraryRepository {
   getTargetEvent(eventId: string, tenantId?: string): Promise<ItineraryEventRecord | null>;
   getDayEvents(itineraryId: string, eventDate: string, tenantId?: string): Promise<ItineraryEventRecord[]>;
@@ -66,6 +98,7 @@ export interface ItineraryRepository {
   getSnapshots(eventIds: string[], tenantId?: string): Promise<EventSnapshotRecord[]>;
   updateEvent(update: EventUpdatePayload, tenantId?: string): Promise<boolean>;
   rollbackEvent(snapshot: EventSnapshotRecord, tenantId?: string): Promise<void>;
+  executeAtomicCascade(params: AtomicCascadeParams): Promise<AtomicCascadeResult>;
 }
 
 export interface SupplierRepository {
