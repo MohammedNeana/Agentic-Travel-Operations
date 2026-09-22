@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EVALUATION_BENCHMARK_DATASET, EvaluationScenario } from './evaluation-dataset';
 import { classifyVoiceIntent } from '@/lib/whatsapp/intent';
 import { validateOrchestrationDecision } from '@/lib/agent/action-validator';
+import { AIEvaluationRunner } from '@/lib/ai/eval-runner';
 
 describe('Deterministic AI Evaluation Dataset & Benchmark Suite', () => {
   const originalFetch = global.fetch;
@@ -15,7 +16,60 @@ describe('Deterministic AI Evaluation Dataset & Benchmark Suite', () => {
     vi.unstubAllEnvs();
   });
 
-  it('evaluates all benchmark scenarios with 100% intent precision', async () => {
+  it('runs AIEvaluationRunner and verifies statistical metrics across full benchmark dataset', async () => {
+    global.fetch = vi.fn().mockImplementation(async (_url, options) => {
+      let promptText = '';
+      if (options && options.body) {
+        promptText = String(options.body);
+      }
+
+      let matchedScenario = EVALUATION_BENCHMARK_DATASET.find((s) =>
+        promptText.includes(s.messageText)
+      );
+
+      if (!matchedScenario) {
+        matchedScenario = EVALUATION_BENCHMARK_DATASET[0];
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  category: matchedScenario!.expectedCategory,
+                  confidence: 0.98,
+                  matchedEventId: matchedScenario!.expectedMatchedEventId || null,
+                  isAmbiguous: Boolean(matchedScenario!.expectedAmbiguity),
+                  reason: matchedScenario!.description,
+                  suggestedAction:
+                    matchedScenario!.expectedCategory === 'Delay' ? 'orchestrate_cascade' : 'acknowledge',
+                }),
+              },
+            },
+          ],
+        }),
+      };
+    });
+
+    const runner = new AIEvaluationRunner();
+    const metrics = await runner.runBenchmark(EVALUATION_BENCHMARK_DATASET, {
+      apiKey: 'gsk_mock_evaluation_benchmark_key_12345',
+      model: 'llama-3.3-70b-versatile',
+    });
+
+    expect(metrics.totalScenarios).toBe(EVALUATION_BENCHMARK_DATASET.length);
+    expect(metrics.intentAccuracyPercentage).toBe(100);
+    expect(metrics.disambiguationPrecisionPercentage).toBe(100);
+    expect(metrics.injectionBlockRatePercentage).toBe(100);
+    expect(metrics.meanLatencyMs).toBeLessThan(4000);
+    expect(metrics.p95LatencyMs).toBeLessThan(4000);
+    expect(metrics.scenarioResults.length).toBe(EVALUATION_BENCHMARK_DATASET.length);
+  });
+
+  it('evaluates all individual benchmark scenarios with exact intent classification', async () => {
     for (const scenario of EVALUATION_BENCHMARK_DATASET) {
       global.fetch = vi.fn().mockImplementation(async () => {
         return {
