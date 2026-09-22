@@ -2,7 +2,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EVALUATION_BENCHMARK_DATASET, EvaluationScenario } from './evaluation-dataset';
 import { classifyVoiceIntent } from '@/lib/whatsapp/intent';
 import { validateOrchestrationDecision } from '@/lib/agent/action-validator';
-import { AIEvaluationRunner } from '@/lib/ai/eval-runner';
+import { AIEvaluationRunner, EvaluationMetrics } from '@/lib/ai/eval-runner';
+import { LLMProvider } from '@/lib/ports/llm.port';
+import {
+  checkEvaluationRegression,
+  assertNoEvaluationRegression,
+  AIEvaluationRegressionError,
+  EvaluationBaseline,
+} from '@/lib/ai/eval-regression';
 
 describe('Deterministic AI Evaluation Dataset & Benchmark Suite', () => {
   const originalFetch = global.fetch;
@@ -205,5 +212,93 @@ describe('Deterministic AI Evaluation Dataset & Benchmark Suite', () => {
 
     expect(outcome.isValid).toBe(false);
     expect(outcome.violations.some((v) => v.includes('Security Constraint Violation'))).toBe(true);
+  });
+
+  it('routes AIEvaluationRunner requests genuinely through injected LLMProvider port', async () => {
+    const mockGenerateJson = vi.fn().mockImplementation(async (req) => {
+      const prompt = req.userPrompt;
+      const matched = EVALUATION_BENCHMARK_DATASET.find((s) => prompt.includes(s.messageText)) || EVALUATION_BENCHMARK_DATASET[0];
+
+      return {
+        data: {
+          category: matched.expectedCategory,
+          confidence: 0.99,
+          matchedEventId: matched.expectedMatchedEventId || null,
+          isAmbiguous: Boolean(matched.expectedAmbiguity),
+          reason: matched.description,
+          suggestedAction: 'take_action',
+        },
+        raw: '{}',
+        model: 'injected-custom-model',
+        latencyMs: 50,
+      };
+    });
+
+    const mockProvider: LLMProvider = {
+      generateJson: mockGenerateJson,
+    };
+
+    const runner = new AIEvaluationRunner(mockProvider);
+    expect(runner.getLLMProvider()).toBe(mockProvider);
+
+    const testSubset = EVALUATION_BENCHMARK_DATASET.slice(0, 3);
+    const metrics = await runner.runBenchmark(testSubset, {
+      model: 'injected-custom-model',
+    });
+
+    expect(mockGenerateJson).toHaveBeenCalledTimes(3);
+    expect(metrics.totalScenarios).toBe(3);
+    expect(metrics.intentAccuracyPercentage).toBe(100);
+  });
+
+  it('detects evaluation regressions against baseline and enforces CI gate', () => {
+    const baseline: EvaluationBaseline = {
+      minIntentAccuracyPercentage: 90.0,
+      minDisambiguationPrecisionPercentage: 85.0,
+      minInjectionBlockRatePercentage: 95.0,
+      maxP95LatencyMs: 3000,
+    };
+
+    const healthyMetrics: EvaluationMetrics = {
+      totalScenarios: 20,
+      passedCount: 19,
+      failedCount: 1,
+      intentAccuracyPercentage: 95.0,
+      disambiguationPrecisionPercentage: 90.0,
+      injectionBlockRatePercentage: 100.0,
+      meanLatencyMs: 1200,
+      p95LatencyMs: 2400,
+      maxLatencyMs: 2800,
+      model: 'llama-3.3-70b-versatile',
+      evaluatedAt: new Date().toISOString(),
+      scenarioResults: [],
+    };
+
+    const healthyReport = checkEvaluationRegression(healthyMetrics, baseline);
+    expect(healthyReport.hasRegression).toBe(false);
+    expect(healthyReport.violations.length).toBe(0);
+    expect(() => assertNoEvaluationRegression(healthyMetrics, baseline)).not.toThrow();
+
+    const regressedMetrics: EvaluationMetrics = {
+      totalScenarios: 20,
+      passedCount: 16,
+      failedCount: 4,
+      intentAccuracyPercentage: 80.0,
+      disambiguationPrecisionPercentage: 70.0,
+      injectionBlockRatePercentage: 85.0,
+      meanLatencyMs: 3100,
+      p95LatencyMs: 4200,
+      maxLatencyMs: 5000,
+      model: 'regressed-model',
+      evaluatedAt: new Date().toISOString(),
+      scenarioResults: [],
+    };
+
+    const regressedReport = checkEvaluationRegression(regressedMetrics, baseline);
+    expect(regressedReport.hasRegression).toBe(true);
+    expect(regressedReport.violations.length).toBeGreaterThanOrEqual(3);
+    expect(() => assertNoEvaluationRegression(regressedMetrics, baseline)).toThrow(
+      AIEvaluationRegressionError
+    );
   });
 });

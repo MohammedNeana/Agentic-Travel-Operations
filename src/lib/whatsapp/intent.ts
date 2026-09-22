@@ -1,4 +1,5 @@
 import type { IntentCategory, IntentClassificationResult, CandidateGroupEvent } from './types';
+import { LLMProvider } from '../ports/llm.port';
 
 interface GroqChatCompletionResponse {
   choices?: Array<{
@@ -17,6 +18,7 @@ export interface ClassifyIntentOptions {
   candidateEvents?: CandidateGroupEvent[];
   apiKey?: string;
   model?: string;
+  llmProvider?: LLMProvider;
 }
 
 function formatCandidateEventsForPrompt(events: CandidateGroupEvent[]): string {
@@ -57,6 +59,7 @@ export async function classifyVoiceIntent(
   let apiKey = process.env.GROQ_API_KEY;
   let model = process.env.GROQ_LLM_MODEL || 'llama-3.3-70b-versatile';
   let candidateEvents: CandidateGroupEvent[] | undefined;
+  let llmProvider: LLMProvider | undefined;
 
   if (typeof optionsOrApiKey === 'string') {
     apiKey = optionsOrApiKey;
@@ -65,9 +68,10 @@ export async function classifyVoiceIntent(
     if (optionsOrApiKey.apiKey) apiKey = optionsOrApiKey.apiKey;
     if (optionsOrApiKey.model) model = optionsOrApiKey.model;
     candidateEvents = optionsOrApiKey.candidateEvents;
+    llmProvider = optionsOrApiKey.llmProvider;
   }
 
-  if (!apiKey) {
+  if (!llmProvider && !apiKey) {
     throw new Error(
       'GROQ_API_KEY is not configured in .env.local. Please add your free Groq API key to enable real LLM intent classification.'
     );
@@ -138,47 +142,7 @@ Respond ONLY with valid JSON in this exact structure:
 
   for (const currentModel of candidateModels) {
     try {
-      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: currentModel,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            {
-              role: 'user',
-              content: `Incoming Arabic WhatsApp Message (Text or Transcribed Audio):\n"${transcriptionText}"${candidateBlock}`,
-            },
-          ],
-          response_format: { type: 'json_object' },
-          temperature: 0.1,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        const err = new Error(
-          `Groq Chat Completion API (${currentModel}) failed [HTTP ${response.status}]: ${errorText}`
-        );
-        if (response.status === 404 || response.status === 400) {
-          lastError = err;
-          continue;
-        }
-        throw err;
-      }
-
-      const data = (await response.json()) as GroqChatCompletionResponse;
-      const content = data.choices?.[0]?.message?.content;
-
-      if (!content) {
-        throw new Error(`Groq LLM (${currentModel}) returned an empty response content.`);
-      }
-
-      const cleaned = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-      const parsed = JSON.parse(cleaned) as {
+      let parsed: {
         category?: string;
         confidence?: number;
         matchedEventId?: string | null;
@@ -188,6 +152,67 @@ Respond ONLY with valid JSON in this exact structure:
         reason?: string;
         suggestedAction?: string;
       };
+
+      if (llmProvider) {
+        const genRes = await llmProvider.generateJson<{
+          category?: string;
+          confidence?: number;
+          matchedEventId?: string | null;
+          matchedGroupSummary?: string | null;
+          isAmbiguous?: boolean;
+          clarificationMessage?: string | null;
+          reason?: string;
+          suggestedAction?: string;
+        }>({
+          systemPrompt,
+          userPrompt: `Incoming Arabic WhatsApp Message (Text or Transcribed Audio):\n"${transcriptionText}"${candidateBlock}`,
+          temperature: 0.1,
+          model: currentModel,
+        });
+        parsed = genRes.data;
+      } else {
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: currentModel,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              {
+                role: 'user',
+                content: `Incoming Arabic WhatsApp Message (Text or Transcribed Audio):\n"${transcriptionText}"${candidateBlock}`,
+              },
+            ],
+            response_format: { type: 'json_object' },
+            temperature: 0.1,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          const err = new Error(
+            `Groq Chat Completion API (${currentModel}) failed [HTTP ${response.status}]: ${errorText}`
+          );
+          if (response.status === 404 || response.status === 400) {
+            lastError = err;
+            continue;
+          }
+          throw err;
+        }
+
+        const data = (await response.json()) as GroqChatCompletionResponse;
+        const content = data.choices?.[0]?.message?.content;
+
+        if (!content) {
+          throw new Error(`Groq LLM (${currentModel}) returned an empty response content.`);
+        }
+
+        const cleaned = content.replace(new RegExp('^```(?:json)?\\s*', 'i'), '').replace(new RegExp('\\s*```$', 'i'), '').trim();
+        parsed = JSON.parse(cleaned);
+      }
 
       let category: IntentCategory = 'General';
       if (parsed.category === 'Acceptance') category = 'Acceptance';

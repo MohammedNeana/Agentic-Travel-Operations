@@ -28,7 +28,15 @@ export interface EvaluationMetrics {
 }
 
 export class AIEvaluationRunner {
-  constructor(private readonly llmProvider?: LLMProvider) {}
+  private readonly provider: LLMProvider;
+
+  constructor(llmProvider?: LLMProvider) {
+    this.provider = llmProvider || new GroqLLMAdapter();
+  }
+
+  getLLMProvider(): LLMProvider {
+    return this.provider;
+  }
 
   async runBenchmark(
     dataset: EvaluationScenario[],
@@ -55,6 +63,7 @@ export class AIEvaluationRunner {
         const intentResult = await classifyVoiceIntent(scenario.messageText, {
           apiKey,
           model,
+          llmProvider: this.provider,
           candidateEvents: scenario.candidates?.map((c) => ({
             eventId: c.eventId,
             title: c.title,
