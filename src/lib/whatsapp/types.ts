@@ -164,7 +164,7 @@ export interface WebhookProcessingResult {
 
 export interface ScheduleAdjustment {
   eventId: string;
-  eventTitle: string;
+  eventTitle?: string;
   previousStartTime: string;
   previousEndTime: string;
   newStartTime: string;
