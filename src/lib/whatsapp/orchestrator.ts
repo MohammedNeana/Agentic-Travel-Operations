@@ -7,12 +7,14 @@ import {
   OutboxNoticeRecord,
 } from './types';
 import { validateOrchestrationDecision } from '@/lib/agent/action-validator';
-import { recordAgentOperation } from '@/lib/agent/audit-log';
+import { recordAgentOperation, AgentAuditEntry } from '@/lib/agent/audit-log';
 import { AgentTracer } from '@/lib/observability/telemetry';
 import { LLMProvider } from '@/lib/ports/llm.port';
 import {
   ItineraryRepository,
   SupplierRepository,
+  AtomicCascadeAdjustment,
+  AtomicCascadeOutboxNotice,
 } from '@/lib/ports/repository.port';
 import { NotificationGateway } from '@/lib/ports/notification.port';
 import { GroqLLMAdapter } from '@/lib/adapters/groq-llm.adapter';
@@ -21,13 +23,23 @@ import {
   SupabaseSupplierRepository,
 } from '@/lib/adapters/supabase-repository.adapter';
 import { WhatsAppNotificationAdapter } from '@/lib/adapters/whatsapp-notification.adapter';
-import crypto from 'crypto';
+import { SupabaseClient } from '@supabase/supabase-js';
 
 export interface OrchestrationDependencies {
   llmProvider?: LLMProvider;
   itineraryRepo?: ItineraryRepository;
   supplierRepo?: SupplierRepository;
   notificationGateway?: NotificationGateway;
+}
+
+export function createDefaultOrchestrationDependencies(client?: SupabaseClient): OrchestrationDependencies {
+  const supabase = client || createServerSupabaseClient();
+  return {
+    itineraryRepo: new SupabaseItineraryRepository(supabase),
+    supplierRepo: new SupabaseSupplierRepository(supabase),
+    notificationGateway: new WhatsAppNotificationAdapter(supabase),
+    llmProvider: new GroqLLMAdapter(),
+  };
 }
 
 export async function orchestrateItineraryCascade(
@@ -40,15 +52,18 @@ export async function orchestrateItineraryCascade(
   },
   dependencies?: OrchestrationDependencies
 ): Promise<OrchestrationExecutionResult> {
-  const supabase = createServerSupabaseClient();
-  const itineraryRepo = dependencies?.itineraryRepo || new SupabaseItineraryRepository(supabase);
-  const supplierRepo = dependencies?.supplierRepo || new SupabaseSupplierRepository(supabase);
+  const itineraryRepo =
+    dependencies?.itineraryRepo ??
+    new SupabaseItineraryRepository(createServerSupabaseClient());
+  const supplierRepo =
+    dependencies?.supplierRepo ??
+    new SupabaseSupplierRepository(createServerSupabaseClient());
   const notificationGateway =
-    dependencies?.notificationGateway || new WhatsAppNotificationAdapter(supabase);
-  const llmProvider = dependencies?.llmProvider || new GroqLLMAdapter();
+    dependencies?.notificationGateway ??
+    new WhatsAppNotificationAdapter(createServerSupabaseClient());
+  const llmProvider = dependencies?.llmProvider ?? new GroqLLMAdapter();
 
   const { eventId, vendorMessage } = options;
-  const startTs = Date.now();
 
   const targetEvent = await itineraryRepo.getTargetEvent(eventId, options.tenantId);
 
@@ -69,6 +84,49 @@ export async function orchestrateItineraryCascade(
     senderPhone: options.senderPhone,
   });
 
+  const providers = await supplierRepo.getProviders(tenantId);
+
+  if (options.senderPhone) {
+    const normalizedSender = options.senderPhone.replace(/\D/g, '');
+    const senderProvider =
+      providers.find((p) => (p.phone_number || '').replace(/\D/g, '') === normalizedSender) ||
+      (await supplierRepo.findProviderByPhone(options.senderPhone, tenantId));
+
+    const isAuthorized =
+      senderProvider && senderProvider.id === targetEvent.experience_provider_id;
+
+    if (!isAuthorized) {
+      const authViolation = `Semantic Authorization Block: Sender ${options.senderPhone} is not authorized for target event ${targetEvent.id}.`;
+      await recordAgentOperation({
+        operationId: tracer.getContext().agentRunId,
+        operationType: 'action_boundary_block',
+        tenantId,
+        itineraryId: targetEvent.itinerary_id,
+        eventId: targetEvent.id,
+        triggerMessageId: options.triggerMessageId,
+        senderPhone: options.senderPhone,
+        latencyMs: tracer.getTotalDurationMs(),
+        rationale: `Unauthorized access attempt from sender phone ${options.senderPhone}`,
+        validationStatus: 'rejected',
+        violations: [authViolation],
+        metadata: {
+          traceId: tracer.getContext().traceId,
+          traceparent: tracer.toTraceparent(),
+          spans: tracer.getSpans(),
+        },
+      });
+
+      return {
+        success: false,
+        updatedEventsCount: 0,
+        dispatchedNoticesCount: 0,
+        error: authViolation,
+        incidentSummary: authViolation,
+        validationViolations: [authViolation],
+      };
+    }
+  }
+
   const allEvents = await itineraryRepo.getDayEvents(
     targetEvent.itinerary_id,
     targetEvent.event_date,
@@ -84,7 +142,6 @@ export async function orchestrateItineraryCascade(
     };
   }
 
-  const providers = await supplierRepo.getProviders(tenantId);
   const itineraryData = await itineraryRepo.getItinerary(targetEvent.itinerary_id, tenantId);
 
   let travelerNationality = 'دولي';
@@ -176,18 +233,21 @@ export async function orchestrateItineraryCascade(
 
   if (!validation.isValid || !validation.validatedDecision) {
     const escalationReason = `AI Action Boundary Block: Schedule adjustments rejected due to domain constraint violations: ${validation.violations.join('; ')}`;
-    await itineraryRepo.updateEvent({
-      id: targetEvent.id,
-      startTime: targetEvent.start_time,
-      endTime: targetEvent.end_time,
-      status: 'escalated',
-      escalationReason,
-    }, tenantId);
+    await itineraryRepo.updateEvent(
+      {
+        id: targetEvent.id,
+        startTime: targetEvent.start_time,
+        endTime: targetEvent.end_time,
+        status: 'escalated',
+        escalationReason,
+      },
+      tenantId
+    );
 
     await recordAgentOperation({
       operationId: tracer.getContext().agentRunId,
       operationType: 'action_boundary_block',
-      tenantId: options.tenantId || targetEvent.tenant_id,
+      tenantId,
       itineraryId: targetEvent.itinerary_id,
       eventId: targetEvent.id,
       triggerMessageId: options.triggerMessageId,
@@ -199,6 +259,7 @@ export async function orchestrateItineraryCascade(
       violations: validation.violations,
       metadata: {
         traceId: tracer.getContext().traceId,
+        traceparent: tracer.toTraceparent(),
         spans: tracer.getSpans(),
       },
     });
@@ -214,78 +275,24 @@ export async function orchestrateItineraryCascade(
   }
 
   const validatedDecision = validation.validatedDecision;
-  const targetIds = validatedDecision.scheduleAdjustments.map((a) => a.eventId);
-  const snapshotRows = await itineraryRepo.getSnapshots(targetIds, tenantId);
 
-  const successfullyUpdatedIds: string[] = [];
-  let updateFailed = false;
-  let updateErrorMessage = '';
-
-  const mutationSpan = tracer.startSpan('mutate_itinerary_events', 'mutation');
-  for (const adj of validatedDecision.scheduleAdjustments) {
+  const adjustments: AtomicCascadeAdjustment[] = validatedDecision.scheduleAdjustments.map((adj) => {
     const startStr = adj.newStartTime.length === 5 ? `${adj.newStartTime}:00` : adj.newStartTime;
     const endStr = adj.newEndTime.length === 5 ? `${adj.newEndTime}:00` : adj.newEndTime;
-
     const baseReason = adj.reason || validatedDecision.incidentSummary;
     const fullReason = validatedDecision.travelerNotification
       ? `${baseReason} [${validatedDecision.travelerNotification.language}]: "${validatedDecision.travelerNotification.message}"`
       : baseReason;
-
-    const ok = await itineraryRepo.updateEvent({
-      id: adj.eventId,
+    return {
+      eventId: adj.eventId,
       startTime: startStr,
       endTime: endStr,
       status: adj.newStatus || 'escalated',
       escalationReason: fullReason,
-    }, tenantId);
-
-    if (!ok) {
-      updateFailed = true;
-      updateErrorMessage = `Failed to update event ${adj.eventId}`;
-      break;
-    }
-    successfullyUpdatedIds.push(adj.eventId);
-  }
-  tracer.endSpan(mutationSpan, { updatedCount: successfullyUpdatedIds.length, failed: updateFailed });
-
-  if (updateFailed) {
-    if (snapshotRows && snapshotRows.length > 0 && successfullyUpdatedIds.length > 0) {
-      const rowsToRollback = snapshotRows.filter((r) => successfullyUpdatedIds.includes(r.id));
-      for (const orig of rowsToRollback) {
-        await itineraryRepo.rollbackEvent(orig, tenantId);
-      }
-    }
-
-    await recordAgentOperation({
-      operationId: tracer.getContext().agentRunId,
-      operationType: 'transaction_rollback',
-      tenantId: options.tenantId || targetEvent.tenant_id,
-      itineraryId: targetEvent.itinerary_id,
-      eventId: targetEvent.id,
-      triggerMessageId: options.triggerMessageId,
-      senderPhone: options.senderPhone,
-      llmModel: model,
-      latencyMs: tracer.getTotalDurationMs(),
-      rationale: `Atomic transaction rollback: ${updateErrorMessage}`,
-      validationStatus: 'rejected',
-      violations: [`Database Update Failure: ${updateErrorMessage}`],
-      metadata: {
-        traceId: tracer.getContext().traceId,
-        spans: tracer.getSpans(),
-      },
-    });
-
-    return {
-      success: false,
-      updatedEventsCount: 0,
-      dispatchedNoticesCount: 0,
-      error: `Transaction rolled back due to update error: ${updateErrorMessage}`,
-      incidentSummary: validatedDecision.incidentSummary,
-      rollbackOccurred: true,
     };
-  }
+  });
 
-  const rawNotices = validatedDecision.downstreamNotices
+  const rawNotices: AtomicCascadeOutboxNotice[] = validatedDecision.downstreamNotices
     .filter((n) => n.whatsappMessage && n.whatsappMessage.trim().length > 0)
     .map((notice) => ({
       eventId: notice.eventId,
@@ -294,16 +301,10 @@ export async function orchestrateItineraryCascade(
       message: notice.whatsappMessage,
     }));
 
-  const notificationSpan = tracer.startSpan('dispatch_downstream_notices', 'notification');
-  const stagedNotices = await notificationGateway.stageOutbox(rawNotices, tenantId);
-  const { dispatchedCount: dispatchedNoticesCount, updatedNotices: outboxNotices } =
-    await notificationGateway.dispatchOutbox(stagedNotices);
-  tracer.endSpan(notificationSpan, { dispatchedCount: dispatchedNoticesCount });
-
-  await recordAgentOperation({
+  const auditEntry: AgentAuditEntry = {
     operationId: tracer.getContext().agentRunId,
     operationType: 'schedule_cascade',
-    tenantId: options.tenantId || targetEvent.tenant_id,
+    tenantId,
     itineraryId: targetEvent.itinerary_id,
     eventId: targetEvent.id,
     triggerMessageId: options.triggerMessageId,
@@ -314,20 +315,49 @@ export async function orchestrateItineraryCascade(
     validationStatus: 'passed',
     metadata: {
       traceId: tracer.getContext().traceId,
+      traceparent: tracer.toTraceparent(),
       spans: tracer.getSpans(),
+      otelSpans: tracer.toOtelSpans(),
       delayMinutes: validatedDecision.delayMinutes,
-      updatedEventsCount: successfullyUpdatedIds.length,
-      dispatchedNoticesCount,
-      totalOutboxNotices: outboxNotices.length,
-      outboxNotices,
       incidentType: validatedDecision.incidentType,
+      domainEvents: validation.domainEvents || [],
     },
+  };
+
+  const mutationSpan = tracer.startSpan('execute_atomic_cascade', 'mutation');
+  const atomicResult = await itineraryRepo.executeAtomicCascade({
+    tenantId,
+    adjustments,
+    outboxNotices: rawNotices,
+    auditEntry,
   });
+  tracer.endSpan(mutationSpan, {
+    success: atomicResult.success,
+    updatedCount: atomicResult.updatedEventsCount,
+    stagedCount: atomicResult.stagedOutboxNotices.length,
+    error: atomicResult.error,
+  });
+
+  if (!atomicResult.success) {
+    return {
+      success: false,
+      updatedEventsCount: 0,
+      dispatchedNoticesCount: 0,
+      error: `Transaction rolled back due to update error: ${atomicResult.error}`,
+      incidentSummary: validatedDecision.incidentSummary,
+      rollbackOccurred: true,
+    };
+  }
+
+  const notificationSpan = tracer.startSpan('dispatch_downstream_notices', 'notification');
+  const { dispatchedCount: dispatchedNoticesCount, updatedNotices: outboxNotices } =
+    await notificationGateway.dispatchOutbox(atomicResult.stagedOutboxNotices);
+  tracer.endSpan(notificationSpan, { dispatchedCount: dispatchedNoticesCount });
 
   return {
     success: true,
     decision: validatedDecision,
-    updatedEventsCount: successfullyUpdatedIds.length,
+    updatedEventsCount: atomicResult.updatedEventsCount,
     dispatchedNoticesCount,
     incidentSummary: validatedDecision.incidentSummary,
     travelerNotification: validatedDecision.travelerNotification,
@@ -615,11 +645,11 @@ function fallbackOrchestrationDecision(params: {
   } else if (/italian|إيطال|italy/i.test(travelerNationality)) {
     travelerLanguage = 'Italian';
     flag = '🇮🇹';
-    travelerMsg = `Gentili ospiti, vi informiamo che il programma di oggi ha subito un ritardo di ${delayMinutes} minuti per motivi di traffico. Abbiamo già riorganizzato le tappe successive.`;
+    travelerMsg = `Gentili ospiti, vi informiamo che il برنامج اليوم قد تأخر ${delayMinutes} دقيقة لظروف السير.`;
   } else if (/french|فرنس/i.test(travelerNationality)) {
     travelerLanguage = 'French';
     flag = '🇫🇷';
-    travelerMsg = `Chers invités, votre programme d'aujourd'hui a été décalé de ${delayMinutes} minutes en raison de la circulation. Nous réorganisons les prochaines étapes sans attente.`;
+    travelerMsg = `Chers invités, votre programme d'aujourd'hui a été décalé de ${delayMinutes} minutes en raison de la circulation.`;
   }
 
   return {

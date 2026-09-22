@@ -8,6 +8,7 @@ import {
   TimelineEvent,
   ItineraryTimeline,
   parseClockToMinutes,
+  DomainEvent,
 } from '@/lib/domain/models/itinerary-timeline';
 import {
   CompositeSchedulingPolicy,
@@ -71,6 +72,7 @@ export interface ValidationOutcome {
   validatedDecision?: OrchestrationDecision;
   violations: string[];
   requiresHumanEscalation: boolean;
+  domainEvents?: DomainEvent[];
 }
 
 export function validateOrchestrationDecision(
@@ -88,6 +90,7 @@ export function validateOrchestrationDecision(
       isValid: false,
       violations,
       requiresHumanEscalation: true,
+      domainEvents: [],
     };
   }
 
@@ -148,11 +151,14 @@ export function validateOrchestrationDecision(
     violations.push(...policyResult.violations);
   }
 
+  const domainEvents = timeline.pullDomainEvents();
+
   if (violations.length > 0) {
     return {
       isValid: false,
       violations,
       requiresHumanEscalation: true,
+      domainEvents,
     };
   }
 
@@ -161,5 +167,6 @@ export function validateOrchestrationDecision(
     validatedDecision: decision,
     violations: [],
     requiresHumanEscalation: false,
+    domainEvents,
   };
 }
