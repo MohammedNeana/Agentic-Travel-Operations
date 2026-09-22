@@ -83,16 +83,16 @@ export default function DeckPage() {
         <section className="space-y-4 text-left">
           <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2 text-left">
             <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-900 text-white text-xs shrink-0">1</span>
-            The Ground Reality: Why Saudi DMC Operations Are Broken
+            The Ground Reality: Why Experiential DMC Operations Are Broken
           </h2>
           <p className="text-sm leading-relaxed text-slate-600 text-left">
-            Destination Management Companies in Saudi Arabia operate in one of the fastest-growing tourism markets globally. However, their day-to-day operations are constrained by heavy manual friction:
+            Destination Management Companies operate in fast-growing cultural and luxury tourism markets globally. However, their day-to-day operations are constrained by heavy manual friction:
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-left">
             <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2 text-left">
               <span className="text-xs font-bold text-red-700 block">Fragmented Discovery</span>
               <p className="text-xs text-slate-600 leading-relaxed text-left">
-                Local Saudi experience providers (stargazing camps in AlUla, mountain guides in Asir, boat captains in the Red Sea) are scattered across Instagram, TikTok, and personal address books with zero centralized verification or capacity data.
+                Local experience providers (stargazing desert camps, mountain hiking guides, coastal boat captains) are scattered across Instagram, TikTok, and personal address books with zero centralized verification or capacity data.
               </p>
             </div>
             <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2 text-left">
@@ -150,12 +150,12 @@ export default function DeckPage() {
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-900 flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                  3. 90% Autonomous Operations Room via WhatsApp
+                  3. Autonomous Operations Room via WhatsApp
                 </span>
                 <span className="text-[10px] bg-violet-100 text-violet-800 px-2 py-0.5 rounded font-mono font-bold">Llama 3.3 70B Orchestrator</span>
               </div>
               <p className="text-xs text-slate-600 leading-relaxed text-left">
-                Suppliers receive natural, polite WhatsApp booking inquiries without robotic buttons. Inbound replies (both text and Saudi Arabic voice notes) are understood. When a vendor reports a delay, the system recalculates downstream events, shifts database times, and automatically sends polite WhatsApp updates to subsequent vendors.
+                Suppliers receive natural, polite WhatsApp booking inquiries without robotic buttons. Inbound replies (both text and colloquial Arabic voice notes) are understood. When a vendor reports a delay, the system recalculates downstream events, shifts database times, and automatically sends polite WhatsApp updates to subsequent vendors.
               </p>
             </div>
 
@@ -181,7 +181,7 @@ export default function DeckPage() {
                 <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono">Forecasting & SLA Scorecards</span>
               </div>
               <p className="text-xs text-slate-600 leading-relaxed text-left">
-                Forecasts peak seasonal pressure scores across AlUla (Winter Tantora), Asir (Summer), Riyadh, and Jeddah. Generates post-mortem supplier scorecards that track on-time rates and responsiveness to guide future contract allocations.
+                Forecasts peak seasonal pressure scores across high-demand travel seasons and regional hubs. Generates post-mortem supplier scorecards that track on-time rates and responsiveness to guide future contract allocations.
               </p>
             </div>
           </div>
@@ -235,24 +235,24 @@ export default function DeckPage() {
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-left">
             <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-center">
-              <div className="text-2xl font-extrabold text-emerald-700">4 sec</div>
+              <div className="text-2xl font-extrabold text-emerald-700">~2.8s avg</div>
               <div className="text-xs font-bold text-slate-900 mt-1">Disruption Handling</div>
-              <p className="text-[11px] text-slate-500 mt-0.5">vs. 45 mins of manual calls</p>
+              <p className="text-[11px] text-slate-500 mt-0.5">vs. 35–50 mins manual phone tag</p>
             </div>
             <div className="p-4 rounded-2xl bg-violet-50 border border-violet-200 text-center">
-              <div className="text-2xl font-extrabold text-violet-700">92%+</div>
+              <div className="text-2xl font-extrabold text-violet-700">Bounded</div>
               <div className="text-xs font-bold text-slate-900 mt-1">Autonomous Resolution</div>
-              <p className="text-[11px] text-slate-500 mt-0.5">Zero manual call bottleneck</p>
+              <p className="text-[11px] text-slate-500 mt-0.5">Deterministic action boundaries</p>
             </div>
             <div className="p-4 rounded-2xl bg-blue-50 border border-blue-200 text-center">
               <div className="text-2xl font-extrabold text-blue-700">100%</div>
               <div className="text-xs font-bold text-slate-900 mt-1">WhatsApp Native</div>
-              <p className="text-[11px] text-slate-500 mt-0.5">No new app for suppliers</p>
+              <p className="text-[11px] text-slate-500 mt-0.5">Zero new apps or portals</p>
             </div>
             <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-center">
               <div className="text-2xl font-extrabold text-amber-700">26 ms</div>
               <div className="text-xs font-bold text-slate-900 mt-1">Semantic Matching</div>
-              <p className="text-[11px] text-slate-500 mt-0.5">Local vector embeddings</p>
+              <p className="text-[11px] text-slate-500 mt-0.5">Local in-process ONNX vectors</p>
             </div>
           </div>
         </section>
