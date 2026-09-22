@@ -304,6 +304,7 @@ export function computeTimeContext(
 export async function getProviderCandidateEvents(options: {
   senderPhone?: string;
   providerId?: string;
+  tenantId?: string;
 }): Promise<CandidateGroupEvent[]> {
   const supabase = createServerSupabaseClient();
   let targetProviderId = options.providerId;
@@ -312,9 +313,15 @@ export async function getProviderCandidateEvents(options: {
     const cleaned = options.senderPhone.replace(/[^\d]/g, '');
     const lastDigits = cleaned.slice(-8);
 
-    const { data: providers } = await supabase
+    let provQuery = supabase
       .from('experience_providers')
       .select('id, name, phone_number');
+
+    if (options.tenantId) {
+      provQuery = provQuery.eq('tenant_id', options.tenantId);
+    }
+
+    const { data: providers } = await provQuery;
 
     const matching = providers?.find((p) => {
       const pCleaned = (p.phone_number || '').replace(/[^\d]/g, '');
@@ -326,7 +333,13 @@ export async function getProviderCandidateEvents(options: {
 
     if (matching) {
       targetProviderId = matching.id;
+    } else {
+      return [];
     }
+  }
+
+  if (!targetProviderId) {
+    return [];
   }
 
   let eventsQuery = supabase
@@ -335,6 +348,10 @@ export async function getProviderCandidateEvents(options: {
     .neq('status', 'cancelled')
     .order('event_date', { ascending: true })
     .order('start_time', { ascending: true });
+
+  if (options.tenantId) {
+    eventsQuery = eventsQuery.eq('tenant_id', options.tenantId);
+  }
 
   if (targetProviderId) {
     eventsQuery = eventsQuery.eq('experience_provider_id', targetProviderId);
@@ -347,18 +364,30 @@ export async function getProviderCandidateEvents(options: {
   }
 
   const itineraryIds = Array.from(new Set(eventsData.map((e) => e.itinerary_id).filter(Boolean)));
-  const { data: itinerariesData } = await supabase
+  let itinQuery = supabase
     .from('itineraries')
     .select('id, title, guest_count, traveler_profile_id')
     .in('id', itineraryIds);
 
+  if (options.tenantId) {
+    itinQuery = itinQuery.eq('tenant_id', options.tenantId);
+  }
+
+  const { data: itinerariesData } = await itinQuery;
+
   const profileIds = Array.from(
     new Set((itinerariesData || []).map((i) => i.traveler_profile_id).filter(Boolean))
   );
-  const { data: profilesData } = await supabase
+  let profQuery = supabase
     .from('traveler_profiles')
     .select('id, name, nationality, group_size, dietary_restrictions, mobility_notes')
     .in('id', profileIds);
+
+  if (options.tenantId) {
+    profQuery = profQuery.eq('tenant_id', options.tenantId);
+  }
+
+  const { data: profilesData } = await profQuery;
 
   const { dateStr, timeStr } = getRiyadhDateNow();
 
