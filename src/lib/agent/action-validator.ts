@@ -4,6 +4,17 @@ import type {
   ScheduleAdjustment,
   DownstreamVendorNotice,
 } from '@/lib/whatsapp/types';
+import {
+  TimelineEvent,
+  ItineraryTimeline,
+  parseClockToMinutes,
+} from '@/lib/domain/models/itinerary-timeline';
+import {
+  CompositeSchedulingPolicy,
+  PolicyEvaluationContext,
+} from '@/lib/domain/policies/scheduling-policy';
+
+export const parseTimeToMinutes = parseClockToMinutes;
 
 export const ScheduleAdjustmentSchema = z.object({
   eventId: z.string().min(1),
@@ -44,15 +55,7 @@ export const OrchestrationDecisionSchema = z.object({
   travelerNotification: TravelerNotificationSchema,
 });
 
-export interface KnownEventContext {
-  id: string;
-  title: string;
-  date: string;
-  startTime: string;
-  endTime: string;
-  status: string;
-  isImmutable?: boolean;
-}
+export type KnownEventContext = TimelineEvent;
 
 export interface ValidationContext {
   targetEventDate: string;
@@ -68,13 +71,6 @@ export interface ValidationOutcome {
   validatedDecision?: OrchestrationDecision;
   violations: string[];
   requiresHumanEscalation: boolean;
-}
-
-export function parseTimeToMinutes(timeStr: string): number {
-  const parts = timeStr.split(':').map((v) => parseInt(v, 10));
-  const h = isNaN(parts[0]) ? 0 : parts[0];
-  const m = isNaN(parts[1]) ? 0 : parts[1];
-  return h * 60 + m;
 }
 
 export function validateOrchestrationDecision(
@@ -96,10 +92,6 @@ export function validateOrchestrationDecision(
   }
 
   const decision = parsed.data as OrchestrationDecision;
-  const maxShift = context.maxAllowedShiftMinutes ?? 240;
-  const dayStart = context.operationalDayStartMinutes ?? 360;
-  const dayEnd = context.operationalDayEndMinutes ?? 1425;
-
   const knownMap = new Map<string, KnownEventContext>();
   for (const ev of context.knownEvents) {
     knownMap.set(ev.id, ev);
@@ -108,102 +100,52 @@ export function validateOrchestrationDecision(
   for (const adj of decision.scheduleAdjustments) {
     const known = knownMap.get(adj.eventId);
     if (!known) {
-      violations.push(`Security Constraint Violation: eventId "${adj.eventId}" does not exist in the active itinerary.`);
+      violations.push(
+        `Security Constraint Violation: eventId "${adj.eventId}" does not exist in the active itinerary.`
+      );
       continue;
     }
 
     if (context.targetEventDate && known.date && known.date !== context.targetEventDate) {
-      violations.push(`Cross-Day Cascade Violation: Event "${known.title}" (${adj.eventId}) date is ${known.date}, which does not match target operational day ${context.targetEventDate}.`);
-    }
-
-    if (known.isImmutable) {
-      violations.push(`Safety Constraint Violation: Event "${known.title}" (${adj.eventId}) is designated immutable and cannot be automatically rescheduled.`);
-    }
-
-    const startMins = parseTimeToMinutes(adj.newStartTime);
-    const endMins = parseTimeToMinutes(adj.newEndTime);
-
-    if (startMins >= endMins) {
-      violations.push(`Time Order Inversion: Event "${known.title}" start time (${adj.newStartTime}) must be strictly before end time (${adj.newEndTime}).`);
-    }
-
-    const duration = endMins - startMins;
-    if (duration < 15 || duration > 480) {
-      violations.push(`Duration Bounds Violation: Event "${known.title}" duration (${duration} mins) must be between 15m and 8 hours.`);
-    }
-
-    const isNightActivity = /stargazing|نجوم|سماء|فلك|مخيم ليلي/i.test(known.title);
-    if (!isNightActivity) {
-      if (startMins < dayStart || endMins > dayEnd) {
-        violations.push(`Operational Window Violation: Event "${known.title}" (${adj.newStartTime} - ${adj.newEndTime}) falls outside the operational window (06:00 - 23:45).`);
-      }
-    }
-
-    const prevStartMins = parseTimeToMinutes(adj.previousStartTime);
-    const shiftMagnitude = Math.abs(startMins - prevStartMins);
-    if (shiftMagnitude > maxShift) {
-      violations.push(`Excessive Shift Violation: Event "${known.title}" shifted by ${shiftMagnitude} mins, which exceeds the autonomous threshold of ${maxShift} mins.`);
+      violations.push(
+        `Cross-Day Cascade Violation: Event "${known.title}" (${adj.eventId}) date is ${known.date}, which does not match target operational day ${context.targetEventDate}.`
+      );
     }
   }
 
   for (const notice of decision.downstreamNotices) {
     const known = knownMap.get(notice.eventId);
     if (!known) {
-      violations.push(`Notice Validation Violation: Downstream notice targets unknown eventId "${notice.eventId}".`);
+      violations.push(
+        `Notice Validation Violation: Downstream notice targets unknown eventId "${notice.eventId}".`
+      );
     }
   }
 
-  const minBuffer = context.minTransitBufferMinutes ?? 30;
-  const operationalDayEvents = context.knownEvents.filter(
-    (e) => !context.targetEventDate || e.date === context.targetEventDate
-  );
-
-  const adjustmentMap = new Map<string, ScheduleAdjustment>();
+  const timeline = new ItineraryTimeline(context.knownEvents, context.targetEventDate);
+  const adjustmentMap = new Map<string, { newStartTime: string; newEndTime: string }>();
   for (const adj of decision.scheduleAdjustments) {
-    adjustmentMap.set(adj.eventId, adj);
-  }
-
-  const effectiveDailyTimeline: Array<{
-    id: string;
-    title: string;
-    startMins: number;
-    endMins: number;
-    startStr: string;
-    endStr: string;
-  }> = [];
-
-  for (const ev of operationalDayEvents) {
-    const adj = adjustmentMap.get(ev.id);
-    const startStr = adj ? adj.newStartTime : ev.startTime;
-    const endStr = adj ? adj.newEndTime : ev.endTime;
-    const startMins = parseTimeToMinutes(startStr);
-    const endMins = parseTimeToMinutes(endStr);
-
-    effectiveDailyTimeline.push({
-      id: ev.id,
-      title: ev.title,
-      startMins,
-      endMins,
-      startStr,
-      endStr,
+    adjustmentMap.set(adj.eventId, {
+      newStartTime: adj.newStartTime,
+      newEndTime: adj.newEndTime,
     });
   }
 
-  effectiveDailyTimeline.sort((a, b) => a.startMins - b.startMins || a.endMins - b.endMins);
+  const effectiveTimeline = timeline.buildEffectiveTimeline(adjustmentMap);
+  const compositePolicy = new CompositeSchedulingPolicy();
+  const policyResult = compositePolicy.evaluate({
+    targetEventDate: context.targetEventDate,
+    knownEvents: context.knownEvents,
+    decision,
+    effectiveTimeline,
+    maxAllowedShiftMinutes: context.maxAllowedShiftMinutes,
+    minTransitBufferMinutes: context.minTransitBufferMinutes,
+    operationalDayStartMinutes: context.operationalDayStartMinutes,
+    operationalDayEndMinutes: context.operationalDayEndMinutes,
+  });
 
-  for (let i = 0; i < effectiveDailyTimeline.length - 1; i++) {
-    const current = effectiveDailyTimeline[i];
-    const next = effectiveDailyTimeline[i + 1];
-
-    if (current.endMins > next.startMins) {
-      violations.push(
-        `Schedule Overlap Violation: Event "${current.title}" (${current.startStr} - ${current.endStr}) overlaps with "${next.title}" (${next.startStr} - ${next.endStr}).`
-      );
-    } else if (next.startMins - current.endMins < minBuffer) {
-      violations.push(
-        `Transit Buffer Violation: Insufficient transit buffer between "${current.title}" (ends ${current.endStr}) and "${next.title}" (starts ${next.startStr}). Required: ${minBuffer}m, available: ${next.startMins - current.endMins}m.`
-      );
-    }
+  if (!policyResult.passed) {
+    violations.push(...policyResult.violations);
   }
 
   if (violations.length > 0) {
