@@ -129,18 +129,19 @@ export class ItineraryTimeline {
     return later.startMins - earlier.endMins;
   }
 
-  detectOverlaps(timeline: EffectiveTimelineEvent[]): Array<{ current: EffectiveTimelineEvent; next: EffectiveTimelineEvent }> {
+  detectOverlaps(timeline?: EffectiveTimelineEvent[]): Array<{ current: EffectiveTimelineEvent; next: EffectiveTimelineEvent }> {
+    const list = timeline || this.buildEffectiveTimeline(new Map());
     const overlaps: Array<{ current: EffectiveTimelineEvent; next: EffectiveTimelineEvent }> = [];
-    for (let i = 0; i < timeline.length - 1; i++) {
-      if (timeline[i].endMins > timeline[i + 1].startMins) {
-        overlaps.push({ current: timeline[i], next: timeline[i + 1] });
+    for (let i = 0; i < list.length - 1; i++) {
+      if (list[i].endMins > list[i + 1].startMins) {
+        overlaps.push({ current: list[i], next: list[i + 1] });
         this.recordDomainEvent({
           eventName: 'TimelineOverlapDetected',
           occurredAt: new Date().toISOString(),
           payload: {
-            currentEventId: timeline[i].id,
-            nextEventId: timeline[i + 1].id,
-            overlapMinutes: timeline[i].endMins - timeline[i + 1].startMins,
+            currentEventId: list[i].id,
+            nextEventId: list[i + 1].id,
+            overlapMinutes: list[i].endMins - list[i + 1].startMins,
           },
         });
       }
@@ -149,20 +150,29 @@ export class ItineraryTimeline {
   }
 
   detectTransitDeficits(
-    timeline: EffectiveTimelineEvent[],
+    timeline?: EffectiveTimelineEvent[] | number,
     minBufferMinutes = 30
   ): Array<{ earlier: EffectiveTimelineEvent; later: EffectiveTimelineEvent; deficitMinutes: number }> {
+    let list: EffectiveTimelineEvent[];
+    let bufferMins = minBufferMinutes;
+    if (typeof timeline === 'number') {
+      bufferMins = timeline;
+      list = this.buildEffectiveTimeline(new Map());
+    } else {
+      list = timeline || this.buildEffectiveTimeline(new Map());
+    }
+
     const deficits: Array<{ earlier: EffectiveTimelineEvent; later: EffectiveTimelineEvent; deficitMinutes: number }> = [];
-    for (let i = 0; i < timeline.length - 1; i++) {
-      const current = timeline[i];
-      const next = timeline[i + 1];
+    for (let i = 0; i < list.length - 1; i++) {
+      const current = list[i];
+      const next = list[i + 1];
       if (current.endMins <= next.startMins) {
         const gap = next.startMins - current.endMins;
-        if (gap < minBufferMinutes) {
+        if (gap < bufferMins) {
           deficits.push({
             earlier: current,
             later: next,
-            deficitMinutes: minBufferMinutes - gap,
+            deficitMinutes: bufferMins - gap,
           });
           this.recordDomainEvent({
             eventName: 'TransitBufferDeficitDetected',
