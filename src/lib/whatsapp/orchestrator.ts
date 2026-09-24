@@ -9,12 +9,14 @@ import {
   SupplierRepository,
 } from '@/lib/ports/repository.port';
 import { NotificationGateway } from '@/lib/ports/notification.port';
+import { AuditLogPort } from '@/lib/ports/audit-log.port';
 import { GroqLLMAdapter } from '@/lib/adapters/groq-llm.adapter';
 import {
   SupabaseItineraryRepository,
   SupabaseSupplierRepository,
 } from '@/lib/adapters/supabase-repository.adapter';
 import { WhatsAppNotificationAdapter } from '@/lib/adapters/whatsapp-notification.adapter';
+import { SupabaseAuditAdapter } from '@/lib/adapters/supabase-audit.adapter';
 import {
   TravelOperationsOrchestrator,
   TravelOperationsOrchestratorDependencies,
@@ -29,6 +31,7 @@ export interface OrchestrationDependencies {
   itineraryRepo?: ItineraryRepository;
   supplierRepo?: SupplierRepository;
   notificationGateway?: NotificationGateway;
+  auditLog?: AuditLogPort;
 }
 
 export function createDefaultOrchestrationDependencies(client?: SupabaseClient): TravelOperationsOrchestratorDependencies {
@@ -38,6 +41,7 @@ export function createDefaultOrchestrationDependencies(client?: SupabaseClient):
     supplierRepo: new SupabaseSupplierRepository(supabase),
     notificationGateway: new WhatsAppNotificationAdapter(supabase),
     llmProvider: new GroqLLMAdapter(),
+    auditLog: new SupabaseAuditAdapter(),
   };
 }
 
@@ -63,6 +67,7 @@ export async function orchestrateItineraryCascade(
       supplierRepo: dependencies.supplierRepo,
       notificationGateway: dependencies.notificationGateway,
       llmProvider: dependencies.llmProvider,
+      auditLog: dependencies.auditLog || new SupabaseAuditAdapter(),
     };
   } else if (dependencies) {
     const supabase = createServerSupabaseClient();
@@ -72,6 +77,7 @@ export async function orchestrateItineraryCascade(
       notificationGateway:
         dependencies.notificationGateway || new WhatsAppNotificationAdapter(supabase),
       llmProvider: dependencies.llmProvider || new GroqLLMAdapter(),
+      auditLog: dependencies.auditLog || new SupabaseAuditAdapter(),
     };
   } else {
     resolvedDeps = createDefaultOrchestrationDependencies();

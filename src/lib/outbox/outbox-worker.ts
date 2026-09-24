@@ -13,6 +13,8 @@ export interface OutboxWorkerConfig {
   baseBackoffMs?: number;
   maxBackoffMs?: number;
   batchSize?: number;
+  workerId?: string;
+  leaseDurationMs?: number;
 }
 
 export interface OutboxMessageItem {
@@ -31,6 +33,9 @@ export interface OutboxMessageItem {
   idempotencyKey: string;
   createdAt: string;
   lastError?: string;
+  lockedBy?: string;
+  lockedAt?: string;
+  leaseExpiresAt?: number;
 }
 
 export interface OutboxBatchResult {
@@ -68,6 +73,8 @@ export class OutboxWorker {
   private readonly baseBackoffMs: number;
   private readonly maxBackoffMs: number;
   private readonly batchSize: number;
+  private readonly workerId: string;
+  private readonly leaseDurationMs: number;
 
   constructor(
     private readonly gateway: NotificationGateway,
@@ -77,6 +84,12 @@ export class OutboxWorker {
     this.baseBackoffMs = config?.baseBackoffMs ?? 1000;
     this.maxBackoffMs = config?.maxBackoffMs ?? 30000;
     this.batchSize = config?.batchSize ?? 20;
+    this.workerId = config?.workerId ?? crypto.randomUUID();
+    this.leaseDurationMs = config?.leaseDurationMs ?? 30000;
+  }
+
+  getWorkerId(): string {
+    return this.workerId;
   }
 
   createItem(params: {
@@ -108,28 +121,63 @@ export class OutboxWorker {
     };
   }
 
-  async processBatch(items: OutboxMessageItem[]): Promise<OutboxBatchResult> {
+  claimPendingBatch(
+    items: OutboxMessageItem[],
+    customWorkerId?: string
+  ): OutboxMessageItem[] {
     const now = Date.now();
-    const candidateItems = items
-      .filter((item) => {
-        if (item.status === 'dispatched' || item.status === 'dead_letter') {
-          return false;
-        }
-        if (item.status === 'pending' || item.status === 'failed') {
-          return !item.nextRetryAt || item.nextRetryAt <= now;
-        }
+    const effectiveWorkerId = customWorkerId || this.workerId;
+
+    const availableItems = items.filter((item) => {
+      if (item.status === 'dispatched' || item.status === 'dead_letter') {
         return false;
-      })
-      .slice(0, this.batchSize);
+      }
+
+      const isRetryEligible =
+        (item.status === 'pending' || item.status === 'failed') &&
+        (!item.nextRetryAt || item.nextRetryAt <= now);
+
+      const isLeaseExpired =
+        item.status === 'processing' &&
+        Boolean(item.leaseExpiresAt && item.leaseExpiresAt < now);
+
+      const isAlreadyClaimedByMe =
+        item.status === 'processing' && item.lockedBy === effectiveWorkerId;
+
+      const isLockAvailable =
+        !item.lockedBy ||
+        item.lockedBy === effectiveWorkerId ||
+        Boolean(item.leaseExpiresAt && item.leaseExpiresAt < now);
+
+      return (isRetryEligible || isLeaseExpired || isAlreadyClaimedByMe) && isLockAvailable;
+    });
+
+    const claimed: OutboxMessageItem[] = [];
+
+    for (const item of availableItems.slice(0, this.batchSize)) {
+      item.status = 'processing';
+      item.lockedBy = effectiveWorkerId;
+      item.lockedAt = new Date().toISOString();
+      item.leaseExpiresAt = now + this.leaseDurationMs;
+      item.attempts += 1;
+      claimed.push(item);
+    }
+
+    return claimed;
+  }
+
+  async processBatch(
+    items: OutboxMessageItem[],
+    workerId?: string
+  ): Promise<OutboxBatchResult> {
+    const now = Date.now();
+    const claimedItems = this.claimPendingBatch(items, workerId);
 
     let dispatchedCount = 0;
     let failedCount = 0;
     let deadLetterCount = 0;
 
-    for (const item of candidateItems) {
-      item.status = 'processing';
-      item.attempts += 1;
-
+    for (const item of claimedItems) {
       try {
         const sendResult = await this.gateway.sendTextMessage(
           item.recipientPhone,
@@ -140,10 +188,14 @@ export class OutboxWorker {
           item.status = 'dispatched';
           item.dispatchedAt = new Date().toISOString();
           item.lastError = undefined;
+          item.lockedBy = undefined;
+          item.leaseExpiresAt = undefined;
           dispatchedCount += 1;
         } else {
           const errMsg = sendResult.error || 'Gateway returned non-success response';
           item.lastError = errMsg;
+          item.lockedBy = undefined;
+          item.leaseExpiresAt = undefined;
 
           if (item.attempts >= item.maxAttempts) {
             item.status = 'dead_letter';
@@ -158,6 +210,8 @@ export class OutboxWorker {
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
         item.lastError = errMsg;
+        item.lockedBy = undefined;
+        item.leaseExpiresAt = undefined;
 
         if (item.attempts >= item.maxAttempts) {
           item.status = 'dead_letter';
@@ -172,7 +226,7 @@ export class OutboxWorker {
     }
 
     return {
-      totalProcessed: candidateItems.length,
+      totalProcessed: claimedItems.length,
       dispatchedCount,
       failedCount,
       deadLetterCount,

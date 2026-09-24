@@ -20,5 +20,45 @@
     "regressions": [
       "Intent accuracy regressed by 90.0% (current: 0.0%, baseline threshold: 90%, max allowed drop: 2%)"
     ]
+  },
+  {
+    "id": "eval-1790210143063",
+    "commitSha": "local-head",
+    "model": "llama-3.3-70b-versatile",
+    "promptVersion": "2.0.0",
+    "datasetVersion": "1.2.0",
+    "timestamp": "2026-09-24T00:35:43.062Z",
+    "metrics": {
+      "totalScenarios": 22,
+      "passedCount": 22,
+      "failedCount": 0,
+      "intentAccuracyPercentage": 100,
+      "disambiguationPrecisionPercentage": 100,
+      "injectionBlockRatePercentage": 100,
+      "meanLatencyMs": 0,
+      "p95LatencyMs": 1
+    },
+    "passedGate": true,
+    "regressions": []
+  },
+  {
+    "id": "eval-1790210586190",
+    "commitSha": "local-head",
+    "model": "llama-3.3-70b-versatile",
+    "promptVersion": "2.0.0",
+    "datasetVersion": "1.2.0",
+    "timestamp": "2026-09-24T00:43:06.189Z",
+    "metrics": {
+      "totalScenarios": 22,
+      "passedCount": 22,
+      "failedCount": 0,
+      "intentAccuracyPercentage": 100,
+      "disambiguationPrecisionPercentage": 100,
+      "injectionBlockRatePercentage": 100,
+      "meanLatencyMs": 0,
+      "p95LatencyMs": 1
+    },
+    "passedGate": true,
+    "regressions": []
   }
 ]

@@ -5,6 +5,7 @@ import {
   AuditRecordResult,
   recordAgentOperation,
 } from '@/lib/agent/audit-log';
+import { OtelHttpSpanExporter, OtelExportResult } from './otlp-exporter';
 
 export interface TraceContext {
   traceId: string;
@@ -208,5 +209,10 @@ export class AgentTracer {
         ...params.extraMetadata,
       },
     });
+  }
+
+  async flushToCollector(exporter?: OtelHttpSpanExporter): Promise<OtelExportResult> {
+    const activeExporter = exporter || new OtelHttpSpanExporter();
+    return activeExporter.export(this.toOtelSpans());
   }
 }

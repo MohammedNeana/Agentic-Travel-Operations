@@ -5,7 +5,7 @@
 [![Supabase pgvector](https://img.shields.io/badge/Supabase-pgvector_%2B_RLS-3ECF8E?logo=supabase&style=flat-square)](https://supabase.com/)
 [![Meta WhatsApp Cloud API](https://img.shields.io/badge/Meta-WhatsApp_Cloud_API-25D366?logo=whatsapp&style=flat-square)](https://developers.facebook.com/docs/whatsapp/cloud-api)
 [![Groq Llama 3.3 70B](https://img.shields.io/badge/Groq-Llama_3.3_70B_%26_Whisper--v3-f55036?style=flat-square)](https://groq.com/)
-[![Vitest](https://img.shields.io/badge/Tests-67%2F67_Passing-brightgreen?logo=vitest&style=flat-square)](tests/)
+[![Vitest](https://img.shields.io/badge/Tests-71%2F71_Passing-brightgreen?logo=vitest&style=flat-square)](tests/)
 [![Architecture](https://img.shields.io/badge/Architecture-DDD_%2B_Hexagonal_Ports-blueviolet?style=flat-square)](src/lib/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
@@ -259,13 +259,14 @@ npx tsx scripts/ci-ai-eval-gate.ts
 
 ---
 
-## Automated Test Suites (67 / 67 Passing)
+## Automated Test Suites (71 / 71 Passing)
 
-The test harness runs under **Vitest 3.2** and executes in **~732ms**:
+The test harness runs under **Vitest 3.2** and executes in **~720ms**:
 
 ```bash
  ✓ tests/domain/property-based-invariants.test.ts (3 tests)
  ✓ tests/chaos/load-resilience.test.ts (3 tests)
+ ✓ tests/chaos/concurrency-race.test.ts (4 tests)
  ✓ tests/domain/outbox-worker.test.ts (5 tests)
  ✓ tests/domain/prompt-versioning.test.ts (4 tests)
  ✓ tests/domain/domain-authorization.test.ts (4 tests)
@@ -280,12 +281,16 @@ The test harness runs under **Vitest 3.2** and executes in **~732ms**:
  ✓ tests/e2e-webhook-pipeline.test.ts (4 tests)
  ✓ tests/e2e-orchestration.test.ts (2 tests)
 
-Test Files  15 passed (15)
-     Tests  67 passed (67)
-  Duration  732ms
+Test Files  16 passed (16)
+     Tests  71 passed (71)
+  Duration  720ms
 ```
 
 ### Key Verification Highlights:
+- **Distributed Outbox Contention & Exactly-Once Delivery:** 5 concurrent worker instances contending for staged outbox items with distributed lease locks (`FOR UPDATE SKIP LOCKED` logic) guarantee exactly-once delivery with zero duplicates and zero dropped notifications.
+- **Worker Crash & Lease Recovery:** Expired leases from crashed workers are automatically reclaimed by healthy workers without losing notifications.
+- **Optimistic Concurrency Control (OCC):** Prevents stale schedule mutations when concurrent coordinators or suppliers update the same itinerary event simultaneously.
+- **OpenTelemetry OTLP Exporter:** Streams standard traces directly to OTLP collector (`OTEL_EXPORTER_OTLP_ENDPOINT` e.g. Jaeger / Grafana / Datadog).
 - **Property-Based Invariant Verification:** Tests 100+ random permutations proving that *ANY* overlapping interval, transit buffer deficit ($< 30$ mins), or mutation of locked bookings (`isImmutable: true`) is strictly rejected.
 - **Chaos & Load Resilience:** Verifies handling of 50 concurrent incoming messages, duplicate webhook replay attacks, simulated LLM timeouts, and outbox network failure recovery.
 - **Adversarial Prompt Injection Defense:** Proves 100% block rate against attempts to override operational boundaries via malicious voice or text instructions.
@@ -329,10 +334,14 @@ Full threat modeling and mitigation proofs are authored in [`docs/security/threa
 
 ```
 Agentic-Travel-Operations/
+├── .github/
+│   └── workflows/
+│       └── ci.yml                         # Automated CI Test, Build & AI Regression Gate
 ├── docs/
 │   ├── images/
 │   │   ├── smart-itinerary-builder.png    # Live UI Itinerary & Operations screenshot
-│   │   └── supplier-sourcing-engine.png   # AI Sourcing & Extraction screenshot
+│   │   ├── supplier-sourcing-engine.png   # AI Sourcing & Extraction screenshot
+│   │   └── product-deck.png               # Executive Solution Deck screenshot
 │   └── security/
 │       └── threat-model.md                # STRIDE Security Threat Model & Mitigation Matrix
 ├── scripts/
@@ -375,16 +384,23 @@ Agentic-Travel-Operations/
 │       │       ├── llm.port.ts             # LLMProvider Interface
 │       │       ├── itinerary-repository.port.ts # ItineraryRepository Interface
 │       │       ├── supplier-repository.port.ts  # SupplierRepository Interface
-│       │       └── notification-gateway.port.ts # NotificationGateway Interface
+│       │       ├── notification-gateway.port.ts # NotificationGateway Interface
+│       │       └── audit-log.port.ts       # AuditLogPort Interface
+│       ├── adapters/
+│       │   ├── groq-llm.adapter.ts         # LLMProvider Groq Adapter
+│       │   ├── supabase-repository.adapter.ts # Repositories Supabase Adapter
+│       │   ├── supabase-audit.adapter.ts   # AuditLogPort Supabase Adapter
+│       │   └── whatsapp-notification.adapter.ts # Notification WhatsApp Adapter
 │       ├── outbox/
-│       │   └── outbox-worker.ts            # Production Outbox Worker (Backoff, Jitter, DLQ)
+│       │   └── outbox-worker.ts            # Production Outbox Worker (Distributed Claims, DLQ)
 │       ├── prompts/
 │       │   ├── types.ts                    # Prompt Metadata & Template Types
 │       │   ├── registry.ts                 # Structured Versioned Prompt Registry
 │       │   ├── intent-classifier/          # v1.0.0, v2.0.0
 │       │   └── orchestrator/               # v1.0.0
-│       ├── telemetry/
-│       │   └── tracer.ts                   # OpenTelemetry Standard Tracer & W3C traceparent
+│       ├── observability/
+│       │   ├── telemetry.ts                # W3C traceparent & OTel Spans
+│       │   └── otlp-exporter.ts            # OpenTelemetry OTLP/HTTP Exporter
 │       ├── ai/
 │       │   ├── eval-runner.ts              # AI Benchmark Evaluation Runner
 │       │   ├── eval-regression.ts          # AI Regression Detection Engine
@@ -408,13 +424,14 @@ Agentic-Travel-Operations/
 └── tests/
     ├── domain/
     │   ├── property-based-invariants.test.ts # 100+ Random Permutation Invariant Verification
-    │   ├── outbox-worker.test.ts           # Backoff, Jitter & Dead-Letter Queue Tests
+    │   ├── outbox-worker.test.ts           # Backoff, Jitter, Leases & DLQ Tests
     │   ├── prompt-versioning.test.ts       # Versioned Prompt Registry Tests
     │   ├── domain-authorization.test.ts    # Multi-Tenant & Supplier Ownership Tests
     │   ├── telemetry.test.ts               # W3C traceparent & OTel Span Serializer Tests
     │   └── invariants.test.ts              # TimeSlot & Timeline Invariant Tests
     ├── chaos/
-    │   └── load-resilience.test.ts         # 50 Concurrent Requests, Replays & Timeout Tests
+    │   ├── load-resilience.test.ts         # 50 Concurrent Requests, Replays & Timeout Tests
+    │   └── concurrency-race.test.ts        # Distributed Outbox Races & OCC Mutation Tests
     ├── ai/
     │   ├── ai-eval.test.ts                 # Full AI Benchmark Evaluation & Regression Tests
     │   └── evaluation-dataset.ts           # Ground-Truth Benchmark Dataset (v1.2.0)

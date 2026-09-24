@@ -1,0 +1,36 @@
+name: CI & AI Quality Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    name: Build, Invariants & Evals Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci || npm install
+
+      - name: Run Vitest Invariant & Property Tests
+        run: npm test
+
+      - name: Run Next.js Production Build
+        run: npm run build
+
+      - name: Run Deterministic AI Evaluation Gate
+        run: npx tsx scripts/ci-ai-eval-gate.ts
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GITHUB_SHA: ${{ github.sha }}

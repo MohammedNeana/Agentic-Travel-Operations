@@ -5,7 +5,7 @@ import {
   DownstreamVendorNotice,
 } from '@/lib/whatsapp/types';
 import { validateOrchestrationDecision } from '@/lib/agent/action-validator';
-import { recordAgentOperation, AgentAuditEntry } from '@/lib/agent/audit-log';
+import { AuditLogPort, AgentAuditEntry } from '@/lib/ports/audit-log.port';
 import { AgentTracer } from '@/lib/observability/telemetry';
 import { LLMProvider } from '@/lib/ports/llm.port';
 import {
@@ -21,6 +21,7 @@ export interface TravelOperationsOrchestratorDependencies {
   readonly itineraryRepo: ItineraryRepository;
   readonly supplierRepo: SupplierRepository;
   readonly notificationGateway: NotificationGateway;
+  readonly auditLog?: AuditLogPort;
 }
 
 export interface OrchestrationRequest {
@@ -69,24 +70,26 @@ export class TravelOperationsOrchestrator {
 
       if (!isAuthorized) {
         const authViolation = `Semantic Authorization Block: Sender ${options.senderPhone} is not authorized for target event ${targetEvent.id}.`;
-        await recordAgentOperation({
-          operationId: tracer.getContext().agentRunId,
-          operationType: 'action_boundary_block',
-          tenantId,
-          itineraryId: targetEvent.itinerary_id,
-          eventId: targetEvent.id,
-          triggerMessageId: options.triggerMessageId,
-          senderPhone: options.senderPhone,
-          latencyMs: tracer.getTotalDurationMs(),
-          rationale: `Unauthorized access attempt from sender phone ${options.senderPhone}`,
-          validationStatus: 'rejected',
-          violations: [authViolation],
-          metadata: {
-            traceId: tracer.getContext().traceId,
-            traceparent: tracer.toTraceparent(),
-            spans: tracer.getSpans(),
-          },
-        });
+        if (this.deps.auditLog) {
+          await this.deps.auditLog.record({
+            operationId: tracer.getContext().agentRunId,
+            operationType: 'action_boundary_block',
+            tenantId,
+            itineraryId: targetEvent.itinerary_id,
+            eventId: targetEvent.id,
+            triggerMessageId: options.triggerMessageId,
+            senderPhone: options.senderPhone,
+            latencyMs: tracer.getTotalDurationMs(),
+            rationale: `Unauthorized access attempt from sender phone ${options.senderPhone}`,
+            validationStatus: 'rejected',
+            violations: [authViolation],
+            metadata: {
+              traceId: tracer.getContext().traceId,
+              traceparent: tracer.toTraceparent(),
+              spans: tracer.getSpans(),
+            },
+          });
+        }
 
         return {
           success: false,
@@ -205,25 +208,27 @@ export class TravelOperationsOrchestrator {
         tenantId
       );
 
-      await recordAgentOperation({
-        operationId: tracer.getContext().agentRunId,
-        operationType: 'action_boundary_block',
-        tenantId,
-        itineraryId: targetEvent.itinerary_id,
-        eventId: targetEvent.id,
-        triggerMessageId: options.triggerMessageId,
-        senderPhone: options.senderPhone,
-        llmModel: model,
-        latencyMs: tracer.getTotalDurationMs(),
-        rationale: vendorMessage,
-        validationStatus: 'rejected',
-        violations: validation.violations,
-        metadata: {
-          traceId: tracer.getContext().traceId,
-          traceparent: tracer.toTraceparent(),
-          spans: tracer.getSpans(),
-        },
-      });
+      if (this.deps.auditLog) {
+        await this.deps.auditLog.record({
+          operationId: tracer.getContext().agentRunId,
+          operationType: 'action_boundary_block',
+          tenantId,
+          itineraryId: targetEvent.itinerary_id,
+          eventId: targetEvent.id,
+          triggerMessageId: options.triggerMessageId,
+          senderPhone: options.senderPhone,
+          llmModel: model,
+          latencyMs: tracer.getTotalDurationMs(),
+          rationale: vendorMessage,
+          validationStatus: 'rejected',
+          violations: validation.violations,
+          metadata: {
+            traceId: tracer.getContext().traceId,
+            traceparent: tracer.toTraceparent(),
+            spans: tracer.getSpans(),
+          },
+        });
+      }
 
       return {
         success: false,
