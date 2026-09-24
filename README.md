@@ -479,14 +479,6 @@ Open [http://localhost:3000](http://localhost:3000) to access the platform.
 
 ---
 
-## Engineering Commitments & Codebase Hygiene
-
-- **0 Code Comments:** Strictly zero `//` or `/* */` comments across all source and test files.
-- **0 Console Statements:** Strictly zero `console.log` in all source and test files.
-- **0 Static Tenant Fallbacks:** No hardcoded fallback UUIDs; all tenant operations are strictly resolved from authenticated session context.
-- **100% Framework Independence:** Core domain models and application services contain zero imports from web or database frameworks.
-
----
 
 ## Author & Engineering Background
 
