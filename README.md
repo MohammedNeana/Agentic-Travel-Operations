@@ -1,28 +1,68 @@
-# Agentic Travel Operations: AI-Powered Supply Intelligence & Autonomous Operations Platform for DMCs
+# Agentic Travel Operations: Autonomous Supply Intelligence & Self-Healing Operations for DMCs
 
 [![Next.js 16](https://img.shields.io/badge/Next.js-16.3.4-black?logo=next.js&style=flat-square)](https://nextjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?logo=typescript&style=flat-square)](https://www.typescriptlang.org/)
+[![TypeScript 5](https://img.shields.io/badge/TypeScript-5.0_Strict-blue?logo=typescript&style=flat-square)](https://www.typescriptlang.org/)
 [![Supabase pgvector](https://img.shields.io/badge/Supabase-pgvector_%2B_RLS-3ECF8E?logo=supabase&style=flat-square)](https://supabase.com/)
 [![Meta WhatsApp Cloud API](https://img.shields.io/badge/Meta-WhatsApp_Cloud_API-25D366?logo=whatsapp&style=flat-square)](https://developers.facebook.com/docs/whatsapp/cloud-api)
 [![Groq Llama 3.3 70B](https://img.shields.io/badge/Groq-Llama_3.3_70B_%26_Whisper--v3-f55036?style=flat-square)](https://groq.com/)
-[![Tailwind CSS 4](https://img.shields.io/badge/Tailwind_CSS-v4-38B2AC?logo=tailwind-css&style=flat-square)](https://tailwindcss.com/)
+[![Vitest](https://img.shields.io/badge/Tests-67%2F67_Passing-brightgreen?logo=vitest&style=flat-square)](tests/)
+[![Architecture](https://img.shields.io/badge/Architecture-DDD_%2B_Hexagonal_Ports-blueviolet?style=flat-square)](src/lib/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
-An enterprise-grade B2B SaaS platform engineered specifically for **Destination Management Companies (DMCs)** managing complex, multi-day itineraries and local experiential supply.
+An enterprise-grade B2B SaaS platform engineered specifically for **Destination Management Companies (DMCs)** operating complex, high-stakes, multi-day experiential travel itineraries across regional hubs.
 
-**Agentic Travel Operations** bridges the gap between fragmented local experience creators scattered across social media and the high-stakes operational realities of running live multi-day tourist itineraries. It eliminates manual firefighting by combining **unstructured supplier extraction**, **hybrid semantic vector search**, **natural conversational WhatsApp dispatching**, and an **autonomous self-healing operations engine** with deterministic safety boundaries that absorbs delays and prevents schedule collapse before travelers are affected.
+**Agentic Travel Operations** bridges the operational divide between fragmented local experience creators (mountain guides, desert astronomers, boutique marine charters, artisanal culinary hosts) and the live operational realities of tourist itineraries. It eliminates manual firefighting through **unstructured supplier entity extraction**, **in-process ONNX hybrid vector search**, **conversational WhatsApp dispatching**, and an **autonomous self-healing operations engine** with deterministic safety boundaries that absorbs supplier delays and prevents schedule collapse before travelers are impacted.
 
 ---
 
-## The Operational Reality: Why Traditional DMC Operations Fail
+## Visual Platform Overview
 
-Destination Management Companies (DMCs) manage high-value, bespoke travel itineraries in rapidly expanding cultural and luxury travel markets. However, the operational backbone of most DMCs remains trapped in manual, error-prone workflows:
+### 1. Smart Itinerary Builder & Live Operations Center
+![Smart Itinerary Builder & Operations](docs/images/smart-itinerary-builder.png)
 
-1. **Fragmented Supplier Discovery:** Authentic local experience creators (stargazing astronomers, mountain guides, coastal captains, boutique culinary artisans) do not exist on traditional Global Distribution Systems (GDS) or corporate booking extranets. They operate primarily on Instagram, TikTok, and direct messaging, making supplier sourcing, verification, and capacity tracking highly fragmented.
-2. **The "WhatsApp Phone-Tag" Bottleneck:** Independent local suppliers rarely adopt complex supplier portals or extranets. Operations coordinators spend hours sending manual chat messages and exchanging voice notes to negotiate availability, confirm guest counts, and relay special requests.
-3. **The 45-Minute Delay Cascade:** Premium experiential itineraries involve substantial transit times between boutique lodges, remote heritage sites, and dining venues. When a morning excursion runs 90 minutes late, a coordinator must scramble to make multiple frantic phone calls: push back lunch, alert the afternoon guide, reschedule sunset viewpoints, and shift dinner reservations. By the time the coordinator finishes making calls, travelers are already waiting, suppliers are frustrated, and schedules collapse.
+*Real-time multi-day itinerary orchestration dashboard featuring minute-level scheduling, traveler restriction enforcement (dietary, mobility, language), and live Supabase Realtime synchronization.*
 
-**Agentic Travel Operations** was architected to replace this chaotic firefighting cycle with **an autonomous, WhatsApp-native operations engine**.
+---
+
+### 2. Autonomous Supplier Sourcing & Vector Discovery
+![Supplier Sourcing & Discovery Engine](docs/images/supplier-sourcing-engine.png)
+
+*AI-driven supplier discovery engine extracting structured profiles from raw unstructured text, social media bios, and web pages with sub-30ms local ONNX vector embeddings for `pgvector` hybrid search.*
+
+---
+
+### 3. Executive Solution Brief & Operational Architecture Deck
+![Executive Solution Deck & Solution Brief](docs/images/product-deck.png)
+
+*Stand-alone printable solution brief and system deck detailing the operational problem, core system capabilities, and agentic workflows.*
+
+---
+
+## The Operational Problem: Why Traditional DMC Operations Collapse
+
+```
+[Local Supplier Delay: 90 Mins]
+             │
+             ▼
+[Manual Phone Call 1: Call Guide] ──► 15 Mins Spent
+             │
+             ▼
+[Manual Phone Call 2: Push Lunch] ──► 12 Mins Spent
+             │
+             ▼
+[Manual Phone Call 3: Call Sunset Host] ──► 10 Mins Spent (No Answer)
+             │
+             ▼
+[Result: Overlapping Bookings, Stranded Travelers, Angry Vendors, Ruined Itinerary]
+```
+
+Destination Management Companies (DMCs) manage high-value bespoke itineraries in rapidly growing travel markets. However, the operational backbone of most DMCs remains trapped in manual, error-prone workflows:
+
+1. **Fragmented Supplier Discovery:** Authentic local experience creators rarely list on corporate GDS extranets. They operate via Instagram, TikTok, and WhatsApp, leaving procurement and capacity tracking fragmented.
+2. **The "WhatsApp Phone-Tag" Bottleneck:** Independent local hosts do not log into complex supplier portals. Operations coordinators spend hours exchanging voice notes and chats to negotiate schedules, confirm headcounts, and relay guest restrictions.
+3. **The 45-Minute Delay Cascade:** Premium experiential travel involves significant transit between boutique lodges, heritage sites, and remote viewpoints. When a morning excursion runs 90 minutes late, a coordinator must make multiple frantic phone calls. By the time they finish, travelers are waiting, suppliers are frustrated, and downstream schedules collapse.
+
+**Agentic Travel Operations** replaces this manual firefighting cycle with **an autonomous, WhatsApp-native operations engine**.
 
 ---
 
@@ -30,167 +70,245 @@ Destination Management Companies (DMCs) manage high-value, bespoke travel itiner
 
 ```mermaid
 flowchart TD
-    subgraph Sourcing ["1. Sourcing & Semantic Discovery"]
-        Web["Social / Web / Raw Text"] --> SSRF["SSRF Firewall (DNS & Private IP Filter)"]
-        SSRF --> Extractor["Groq Llama 3.3 70B Structured Extractor"]
-        Extractor --> DB_Providers[("Supabase: experience_providers (Tenant-Isolated)")]
-        DB_Providers --> Emb["In-Process ONNX Embeddings (all-MiniLM-L6-v2)"]
-        Emb --> DB_Vector[("pgvector 384-dim Hybrid Index")]
-    end
-
-    subgraph Builder ["2. Multi-Tenant Itinerary Builder"]
-        Traveler["Authenticated Traveler Profile (Dietary, Mobility, Language)"] --> Matcher["Hybrid Semantic Matcher (pgvector RPC)"]
-        DB_Vector --> Matcher
-        Matcher --> Schedule["Conflict-Aware Schedule Engine (Transit & Time Buffers)"]
-    end
-
-    subgraph Ingress ["3. Webhook Ingress & Idempotency"]
-        VendorMsg["Supplier WhatsApp (Text or Voice Note)"] --> WAHook["Meta WhatsApp Cloud API Webhook"]
-        WAHook --> SecVerify{"HMAC-SHA256 Sig & Fail-Closed Gate"}
-        SecVerify -- "Valid" --> Idemp{"Atomic State Machine Lock (Lease Check-and-Set)"}
-        SecVerify -- "Invalid" --> DropMsg["Reject (401 Unauthorized)"]
+    subgraph Ingress ["1. WhatsApp Ingress & Security Perimeter"]
+        VendorMsg["Supplier WhatsApp (Audio / Text)"] --> WAHook["Meta WhatsApp Cloud API Webhook"]
+        WAHook --> HMAC{"HMAC-SHA256 Verification (crypto.timingSafeEqual)"}
+        HMAC -- "Invalid" --> Drop401["Reject (401 Unauthorized)"]
+        HMAC -- "Valid" --> Idemp{"Atomic State Machine Lock (Lease Check-and-Set)"}
+        Idemp -- "Duplicate" --> Ack200["200 OK (Duplicate Delivery Suppressed)"]
         Idemp -- "Acquired" --> Whisper["Groq Whisper-large-v3 (Voice-to-Text)"]
-        Idemp -- "Duplicate" --> AckDuplicate["200 OK (Duplicate Delivery Suppressed)"]
     end
 
-    subgraph Reasoning ["4. Intent, Disambiguation & Semantic Authorization"]
-        Whisper --> Disambig["Candidate Group Matching & Context Disambiguation"]
-        Disambig --> SemAuth{"Semantic Authorization Gate (Vendor Event Ownership)"}
-        SemAuth -- "Denied" --> SecEscalate["Security Escalation & Block Audit"]
-        SemAuth -- "Authorized" --> Orchestrator["AI Operations Dispatcher (Llama 3.3 70B)"]
+    subgraph Reasoning ["2. Intent, Context & Semantic Authorization"]
+        Whisper --> IntentEngine["Dialect-Aware Arabic Intent Engine (v2.0.0)"]
+        IntentEngine --> Disambig["Candidate Group Matching & Context Disambiguation"]
+        Disambig --> SemAuth{"Semantic Authorization Gate (Supplier-Event Ownership)"}
+        SemAuth -- "Unauthorized" --> SecAudit["Security Escalation & Audit Log"]
+        SemAuth -- "Authorized" --> AppService["TravelOperationsOrchestrator (Application Service)"]
     end
 
-    subgraph Governance ["5. Action Boundary, Transactions & Outbox Dispatch"]
-        Orchestrator --> ActionBoundary{"Deterministic Action Boundary (action-validator.ts)"}
+    subgraph CoreDomain ["3. Pure Domain Layer (Hexagonal Ports & Invariants)"]
+        AppService --> LLMPort["LLMProvider Port"]
+        AppService --> ItinPort["ItineraryRepository Port"]
+        AppService --> SuppPort["SupplierRepository Port"]
+        AppService --> NotifPort["NotificationGateway Port"]
         
-        ActionBoundary -- "Violation (Overlap / <30m Buffer / Flight)" --> Escalate["Flag Event 'Escalated' & Alert Ops Manager"]
+        AppService --> ActionBoundary{"Deterministic Action Validator (action-validator.ts)"}
+        ActionBoundary --> PolicyEngine["StrictOperationalPolicyEngine (Domain Aggregate)"]
+        PolicyEngine --> Invariant1{"Overlapping Intervals?"}
+        PolicyEngine --> Invariant2{"Transit Buffer < 30m?"}
+        PolicyEngine --> Invariant3{"Immutable Event Modified?"}
         
-        ActionBoundary -- "Approved" --> TxSnapshot["Transactional Snapshot & Atomic DB Update"]
-        TxSnapshot -- "DB Error" --> Rollback["Atomic State Rollback & Rollback Audit"]
+        Invariant1 -- "Violation" --> Escalate["Escalate to Ops Manager"]
+        Invariant2 -- "Violation" --> Escalate
+        Invariant3 -- "Violation" --> Escalate
+    end
+
+    subgraph Persistence ["4. Atomic Multi-Table Transaction & Outbox"]
+        PolicyEngine -- "Approved" --> AtomicTx["PostgreSQL Transaction (itinerary_events + outbox + audit)"]
+        AtomicTx --> DB_Events[("itinerary_events")]
+        AtomicTx --> DB_Audit[("agent_audit_log")]
+        AtomicTx --> DB_Outbox[("notification_outbox (status: pending)")]
+    end
+
+    subgraph ReliableDispatch ["5. Production Outbox Worker & Telemetry"]
+        DB_Outbox --> OutboxWorker["OutboxWorker (Exponential Backoff + Jitter)"]
+        OutboxWorker --> MetaAPI["Meta WhatsApp Cloud API"]
+        OutboxWorker -- "Max Retries Exceeded" --> DLQ[("Dead-Letter Queue (status: dead_letter)")]
+        OutboxWorker -- "Success" --> Sent[("status: dispatched")]
         
-        TxSnapshot -- "Success" --> Outbox["Staged Outbox Notice Queue"]
-        Outbox --> DispatchWA["Meta WhatsApp Cloud API Outbound Dispatch"]
-        Outbox --> TourLeader["Localized Traveler Briefing (JP, IT, EN, FR, DE)"]
-        
-        TxSnapshot --> Audit[("Forensic Audit Log: operation_type, tenant_id, latency")]
-        TxSnapshot --> UI["Real-Time Coordinator Dashboard (Supabase Realtime)"]
+        AppService -.-> OTel["OpenTelemetry Tracing (W3C traceparent, traceId, spanId)"]
+        OTel -.-> Observability["Jaeger / Grafana / Datadog Exporter"]
     end
 ```
 
 ---
 
-## Core System Capabilities
+## Autonomous Disruption Resolution: End-to-End Sequence
 
-### 1. Unstructured Supplier Discovery & Hybrid Vector Search
-- **Instant Entity Extraction:** Ingests unstructured supplier bios, brochures, WhatsApp messages, or scraped web pages, extracting commercial names, verified guest capacities, operating destinations, experience types, and phone numbers.
-- **Zero-Latency Local Embeddings:** Utilizes an in-process `@xenova/transformers` ONNX pipeline (`Xenova/all-MiniLM-L6-v2`) generating 384-dimensional dense vectors in **26ms** locally without paid external embedding APIs.
-- **Supabase `pgvector` Hybrid Search:** Combines dense cosine semantic vectors with full-text SQL matching to rank local suppliers based on traveler interests (e.g., matching "authentic culinary storytelling" or "night desert astronomy" to top-ranked local hosts).
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Supplier as Local Guide (WhatsApp)
+    participant Webhook as WhatsApp Webhook Handler
+    participant Idempotency as Distributed Lock Store
+    participant Whisper as Groq Whisper-large-v3
+    participant Orchestrator as TravelOperationsOrchestrator
+    participant Validator as Action Validator & Domain Policy
+    participant DB as Supabase PostgreSQL
+    participant Outbox as OutboxWorker
+    participant Downstream as Downstream Supplier (WhatsApp)
+    actor TourLeader as Tour Leader (Multilingual Briefing)
 
-### 2. Constraint-Aware Smart Itinerary Builder
-- **Sanity & Constraint Validation:** Real-time checking of transit buffers, opening hours, and logical geographic sequencing across travel destinations.
-- **Dietary & Accessibility Safeguards:** Explicitly checks and enforces traveler restrictions, including dietary preferences, food allergies, and wheelchair or mobility requirements.
-- **Interactive Drag-and-Drop:** Intuitive timeline re-ordering with minute-level start/end time editing and auto-cascading schedule adjustments.
-
-### 3. WhatsApp-Native Conversational Booking & Voice Intelligence
-- **No Robotic Menus:** Dispatches natural, polite, and culturally attuned conversational WhatsApp booking inquiries to suppliers.
-- **Voice Note Comprehension:** Routes incoming WhatsApp audio notes through Groq's high-speed `whisper-large-v3` pipeline, accurately transcribing colloquial voice notes in milliseconds.
-- **Multi-Group Disambiguation:** When a supplier manages multiple groups on the same date (e.g., a morning group currently running vs. an upcoming afternoon VIP delegation), the system analyzes temporal clues, group sizes, and nationalities or opens a conversational clarification loop rather than making blind assumptions.
-
-### 4. Autonomous Operations Center (Deterministic Schedule Cascades)
-- **Automatic Disruption Handling:** When a vendor reports a delay or breakdown, the AI Operations Orchestrator:
-  1. Quantifies delay magnitude and identifies every subsequent downstream booking in the day's chain.
-  2. Recalculates start and end times to eliminate overlap while maintaining transit buffers.
-  3. Updates `itinerary_events` in Supabase with updated timestamps and escalation tags.
-  4. Automatically drafts and dispatches a warm, conversational WhatsApp notice to downstream vendors, confirming their readiness at the revised time.
-- **Multilingual Tour Leader Notifications:** Generates real-time, culturally reassuring updates translated into the traveler group's native language (**Japanese**, **Italian**, **English**, **French**, **German**) so tour leaders can proactively brief guests before frustration occurs.
-
-### 5. Predictive Regional Demand Forecasting (`/forecasting`)
-- **Macro Seasonal Intelligence:** Real-time forecasting of visitor surges, capacity pressure scores (1–100), and pricing spikes across regional tourism hubs, high seasons, and festival peaks.
-- **Supply Bottleneck Warnings:** Proactively flags critical shortages (specialized 4x4 fleets, licensed multilingual cultural guides, boutique accommodations) with specific advance procurement actions.
-- **Custom AI Scenario Simulation:** Allows planners to input custom simulation prompts (e.g. *"A delegation of 40 VIP travelers arriving during peak season requesting private stargazing"*) and receive instant operational risk evaluations.
-
-### 6. Post-Trip Incident Post-Mortems & Supplier Analytics (`/analytics`)
-- **Live Database Auditing:** Directly inspects live Supabase event histories, calculating real-world disruption rates and autonomous self-healing metrics.
-- **Supplier Reliability Scorecards:** Rates suppliers into standardized tiers (**Tier 1 Excellent**, **Tier 2 Reliable**, **Watchlist**, **Needs Improvement**) with qualitative evaluations of WhatsApp responsiveness and punctuality.
-- **Recurring Issue Root Cause Analysis:** Categorizes systemic operational friction points (transit bottlenecks, guide language mismatches, sudden weather contingencies) and defines actionable SLA clauses for DMC procurement.
+    Supplier->>Webhook: Voice Note: "الرحلة اتأخرت ساعة ونص بسبب عطل في سيارة الدفع الرباعي"
+    Webhook->>Webhook: Verify HMAC-SHA256 signature
+    Webhook->>Idempotency: Acquire atomic lock (lease check-and-set)
+    Webhook->>Whisper: Transcribe colloquial Arabic voice note
+    Whisper-->>Webhook: Transcribed Arabic text
+    Webhook->>Orchestrator: Process incident (tenantId, senderPhone, text)
+    Orchestrator->>Orchestrator: Disambiguate active group & verify supplier ownership
+    Orchestrator->>Orchestrator: Calculate cascading schedule shift (delay = 90 mins)
+    Orchestrator->>Validator: Validate proposed schedule mutations
+    Validator->>Validator: Verify 0 overlaps, >= 30m transit buffers, 0 locked events
+    Validator-->>Orchestrator: Decision APPROVED
+    Orchestrator->>DB: Atomic Transaction: Update events + Enqueue Outbox + Write Audit
+    DB-->>Orchestrator: Transaction COMMITTED
+    Orchestrator->>Outbox: Trigger Outbox Worker
+    Outbox->>Downstream: WhatsApp Notice: "السلام عليكم، نود إعلامكم بتأخير موعد الجولة إلى 15:30..."
+    Outbox->>TourLeader: Multilingual Briefing (JP / IT / EN / FR / DE)
+    Outbox->>DB: Mark outbox status: DISPATCHED
+```
 
 ---
 
-## Architectural Comparison & Design Goals
+## Hexagonal Clean Architecture (Domain Isolation)
 
-| Operational Dimension | Traditional Manual Operations | Autonomous DMC Engine Target | Architectural Safeguard |
+The platform strictly isolates core business rules from web frameworks, database drivers, and AI vendor SDKs:
+
+```
+src/
+├── lib/
+│   ├── domain/               ◄── PURE TYPESCRIPT (Zero external dependencies)
+│   │   ├── models/           # Value Objects (TimeSlot) & Aggregate Roots (ItineraryTimeline)
+│   │   ├── policies/         # StrictOperationalPolicyEngine
+│   │   └── ports/            # Abstract Interfaces (LLMProvider, Repositories, Gateway)
+│   ├── application/          ◄── FRAMEWORK-INDEPENDENT APPLICATION SERVICES
+│   │   └── travel-operations.orchestrator.ts # Core orchestration workflow
+│   ├── outbox/               ◄── DURABLE ASYNCHRONOUS WORKER
+│   │   └── outbox-worker.ts  # Exponential backoff, jitter, dead-letter queue
+│   ├── prompts/              ◄── STRUCTURED PROMPT REGISTRY
+│   │   ├── registry.ts       # Versioned prompt selector & fallback engine
+│   │   ├── intent-classifier/ # v1.0.0, v2.0.0 (Dialect-tuned prompts)
+│   │   └── orchestrator/     # v1.0.0 (Operational decision prompts)
+│   ├── telemetry/            ◄── OPENTELEMETRY TRACING
+│   │   └── tracer.ts         # W3C traceparent headers, 32-hex traceId, 16-hex spanId
+│   ├── ai/                   ◄── EVALUATION & BENCHMARKS
+│   │   ├── eval-runner.ts    # Evaluation benchmark execution engine
+│   │   ├── eval-regression.ts# Regression threshold verification
+│   │   └── evaluation-history.ts # Persistent commit & version tracking
+│   ├── security/             ◄── DEFENSIVE BOUNDARIES
+│   │   ├── ssrf.ts           # DNS resolution & private IP blocklist
+│   │   └── webhook-security.ts # Constant-time HMAC validation
+│   └── whatsapp/             ◄── INFRASTRUCTURE ADAPTERS & COMPOSITION ROOT
+│       └── orchestrator.ts   # Dependency injection composition root
+```
+
+---
+
+## Reliable Outbox Worker State Machine
+
+To prevent the classic distributed system failure mode (**"Database updated, but notification failed and was lost"**), all supplier and traveler notifications are staged in PostgreSQL within the same atomic transaction and processed by the `OutboxWorker`:
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending: Staged in Atomic DB Transaction
+    pending --> processing: Worker claims lease
+    processing --> dispatched: HTTP 200 from Meta Cloud API
+    processing --> retry_scheduled: Transient Network Failure (503 / Timeout)
+    
+    retry_scheduled --> processing: Exponential Backoff Delay + Jitter Expired
+    
+    retry_scheduled --> dead_letter: Max Retries (5) Exceeded
+    dead_letter --> [*]: Alert Ops Coordinator via Audit Log
+    dispatched --> [*]: Complete
+```
+
+### Exponential Backoff & Jitter Equation
+$$\text{delay} = \min\left(\text{maxDelayMs}, \text{baseDelayMs} \times 2^{\text{attempt}}\right) + \text{randomJitter}$$
+
+---
+
+## Prompt & Dataset Versioning System
+
+Prompts are treated as first-class, versioned engineering artifacts rather than hardcoded inline strings:
+
+```mermaid
+graph TD
+    PR["Pull Request / Deployment"] --> Registry["PromptRegistry"]
+    Registry --> IntentV1["intent-classifier: 1.0.0"]
+    Registry --> IntentV2["intent-classifier: 2.0.0 (Gulf / Hijazi Dialects)"]
+    Registry --> OrchV1["operations-orchestrator: 1.0.0"]
+    
+    IntentV2 --> EvalRunner["AIEvaluationRunner"]
+    Dataset["Benchmark Dataset (v1.2.0)"] --> EvalRunner
+    EvalRunner --> Metrics["Computed Metrics: Accuracy, Precision, Injection Rate, Latency"]
+    Metrics --> History["Persistent Evaluation History (commitSha, promptVersion, datasetVersion)"]
+    Metrics --> CIGate{"CI Regression Gate"}
+    CIGate -- "Metrics >= Baseline" --> PassCI["CI Check PASSED"]
+    CIGate -- "Regression Detected" --> FailCI["CI Check FAILED (Merge Blocked)"]
+```
+
+---
+
+## AI Evaluation CI Regression Gate
+
+The repository includes an automated CI evaluation gate ([`scripts/ci-ai-eval-gate.ts`](scripts/ci-ai-eval-gate.ts)) that enforces non-negotiable quality thresholds before code can be merged:
+
+| Metric | Minimum Baseline Threshold | Regression Tolerance | Failure Action |
 | :--- | :--- | :--- | :--- |
-| **Disruption Recovery** | 35 – 50 mins of manual phone calls | Sub-second deterministic cascade | Action Boundary verifies bounds & 30m transit buffers |
-| **Downstream Notice** | Often forgotten or relayed late | Automated outbox WhatsApp dispatch | Staged Outbox prevents notice loss on worker error |
-| **Supplier Adoption** | High friction (portals / apps) | Zero friction (100% WhatsApp chat/audio) | Groq Whisper + Dialect-aware intent parsing |
-| **Schedule Integrity** | Manual inspection on spreadsheets | Automated chronological timeline checks | Rejects overlaps (`end > next.start`) & tight buffers |
-| **Guest Communication** | Delayed, reactive notifications | Proactive multi-language traveler briefings | Localized notification generation (JP, IT, EN, FR, DE) |
-| **Supplier Discovery** | Hours browsing social channels | < 30ms local ONNX vector ranking | Tenant-isolated hybrid semantic vector search |
+| **Intent Accuracy** | $\ge 90.0\%$ | Max allowed drop: $2.0\%$ | Block PR Merge |
+| **Disambiguation Precision** | $\ge 85.0\%$ | Max allowed drop: $3.0\%$ | Block PR Merge |
+| **Prompt Injection Block Rate** | $\mathbf{100.0\%}$ | **Zero Tolerance ($0.0\%$)** | Block PR Merge |
+| **P95 Latency** | $\le 3,500\text{ ms}$ | Max allowed increase: $25.0\%$ | Block PR Merge |
 
----
-
-## Tech Stack & Architecture Standards
-
-```
-├── Framework:        Next.js 16 (App Router, Server Components, Route Handlers)
-├── Language:         TypeScript 5 (Strict Mode, 100% Type-Safe)
-├── Database:         PostgreSQL 17 via Supabase with pgvector extension
-├── Security:         Strict Multi-Tenant Row Level Security (RLS) on all tables
-├── AI Engine:        Groq API (Llama 3.3 70B Versatile + Llama 3.1 8B Instant)
-├── Audio Inference:  Groq Whisper-large-v3 (Ultra-low latency audio & voice transcription)
-├── Vector Embeddings: In-Process ONNX WebAssembly via @xenova/transformers (all-MiniLM-L6-v2)
-├── Messaging:        Meta WhatsApp Cloud API (Graph API v21.0, Webhook Verification)
-├── Styling:          Tailwind CSS v4 + Lucide React Icons
+To execute the evaluation gate locally or in GitHub Actions:
+```bash
+npm test
+npx tsx scripts/ci-ai-eval-gate.ts
 ```
 
-### Database Security & Multi-Tenancy
-Every table (`organizations`, `experience_providers`, `itineraries`, `itinerary_events`) enforces strict multi-tenancy:
-- Every table has a non-nullable `tenant_id UUID`.
-- Row Level Security (RLS) is enabled with non-bypassable policies:
-  ```sql
-  CREATE POLICY "tenant_isolation_select" ON public.itinerary_events
-    FOR SELECT USING (tenant_id = auth.uid());
-  ```
-- Fast vector similarity is enabled via pgvector indexing:
-  ```sql
-  CREATE INDEX idx_experience_providers_embedding 
-    ON public.experience_providers 
-    USING ivfflat (embedding vector_cosine_ops);
-  ```
+---
+
+## Automated Test Suites (67 / 67 Passing)
+
+The test harness runs under **Vitest 3.2** and executes in **~732ms**:
+
+```bash
+ ✓ tests/domain/property-based-invariants.test.ts (3 tests)
+ ✓ tests/chaos/load-resilience.test.ts (3 tests)
+ ✓ tests/domain/outbox-worker.test.ts (5 tests)
+ ✓ tests/domain/prompt-versioning.test.ts (4 tests)
+ ✓ tests/domain/domain-authorization.test.ts (4 tests)
+ ✓ tests/domain/telemetry.test.ts (3 tests)
+ ✓ tests/ai/ai-eval.test.ts (6 tests)
+ ✓ tests/integration/pipeline-integration.test.ts (2 tests)
+ ✓ tests/domain/invariants.test.ts (5 tests)
+ ✓ tests/action-validator.test.ts (8 tests)
+ ✓ tests/idempotency.test.ts (8 tests)
+ ✓ tests/ssrf.test.ts (5 tests)
+ ✓ tests/webhook-security.test.ts (5 tests)
+ ✓ tests/e2e-webhook-pipeline.test.ts (4 tests)
+ ✓ tests/e2e-orchestration.test.ts (2 tests)
+
+Test Files  15 passed (15)
+     Tests  67 passed (67)
+  Duration  732ms
+```
+
+### Key Verification Highlights:
+- **Property-Based Invariant Verification:** Tests 100+ random permutations proving that *ANY* overlapping interval, transit buffer deficit ($< 30$ mins), or mutation of locked bookings (`isImmutable: true`) is strictly rejected.
+- **Chaos & Load Resilience:** Verifies handling of 50 concurrent incoming messages, duplicate webhook replay attacks, simulated LLM timeouts, and outbox network failure recovery.
+- **Adversarial Prompt Injection Defense:** Proves 100% block rate against attempts to override operational boundaries via malicious voice or text instructions.
+- **SSRF Defense:** Blocks DNS rebinding, localhost loopbacks, link-local metadata addresses (`169.254.169.254`), and private RFC 1918 subnets.
 
 ---
 
-## AI Safety Boundaries & Governance Architecture
+## Security Architecture & STRIDE Threat Model
 
-Unlike generic LLM wrappers that directly execute raw model outputs against production databases, this platform enforces a multi-layer deterministic safety perimeter:
+Full threat modeling and mitigation proofs are authored in [`docs/security/threat-model.md`](docs/security/threat-model.md):
 
-1. **Deterministic Action Boundary (`action-validator.ts`):**
-   - **Timeline Overlap Prevention:** Automatically sorts day timelines and rejects changes where `current.endMins > next.startMins`.
-   - **Transit Buffer Enforcement:** Mandates a minimum 30-minute operational transit buffer between consecutive events.
-   - **Immutable Event Protection:** Automatically detects flights, border crossings, and high-speed rail connections, forbidding AI time mutations on locked bookings.
-   - **Single-Day Blast Radius Control:** Forbids cross-day cascading adjustments, routing complex disruptions to human operations coordinators.
-
-2. **Semantic Authorization Boundary:**
-   - Enforces supplier verification: incoming vendor messages can only trigger mutations on events explicitly mapped to that vendor's identity.
-
-3. **Distributed State-Machine Idempotency (`idempotency.ts`):**
-   - Manages webhook lifecycle transitions (`received` &rarr; `processing` &rarr; `completed` / `failed`).
-   - Leases in-flight locks with auto-recovery for transient worker crashes and retry capabilities on errors.
-
-4. **Forensic Audit Logging (`audit-log.ts`):**
-   - Persists immutable operation records capturing `operationType`, `tenantId`, `triggerMessageId`, `llmModel`, and `latencyMs`.
-
-5. **Automated Test Harness (`vitest`):**
-   - 32 rigorous unit and integration tests verifying cryptographic webhook signatures, SSRF firewall blocks, action boundary validation, idempotency state transitions, and real end-to-end webhook execution.
-   ```bash
-   npm test
-   ```
+| Threat Category | Attack Surface | Architectural Mitigation | Verification Test |
+| :--- | :--- | :--- | :--- |
+| **Spoofing** | WhatsApp Webhook Ingress | Constant-time HMAC-SHA256 signature verification | `tests/webhook-security.test.ts` |
+| **Tampering** | Supplier Schedule Mutations | Deterministic Action Validator & Immutable Event Locks | `tests/action-validator.test.ts` |
+| **Repudiation** | Incident Operations & Financials | Immutable forensic audit log (`agent_audit_log`) | `tests/e2e-webhook-pipeline.test.ts` |
+| **Information Disclosure** | Multi-Tenant Data Access | Strict Row Level Security (RLS) & Tenant ID filtering | `tests/domain/domain-authorization.test.ts` |
+| **Denial of Service** | Replay Attacks & Web Ingestion | Distributed Idempotency lease locks + SSRF firewall | `tests/idempotency.test.ts`, `tests/ssrf.test.ts` |
+| **Elevation of Privilege**| Hostile Prompt Injections | Deterministic Domain Boundary; zero direct DB access for LLM | `tests/ai/ai-eval.test.ts` |
 
 ---
 
-## Benchmark Methodology & Latency Profile
-
-To maintain engineering rigor, operational benchmarks are measured across both automated integration suites (`tests/`) and end-to-end component profiling:
+## Operational Latency Profile
 
 | Pipeline Stage | Component / Technology | Evaluated Latency | Purpose & Boundary Guarantee |
 | :--- | :--- | :--- | :--- |
@@ -199,20 +317,11 @@ To maintain engineering rigor, operational benchmarks are measured across both a
 | **Vector Search** | In-process ONNX (`all-MiniLM-L6-v2`) | `~26 ms` | Zero-network local embedding generation for pgvector |
 | **Intent & Disambiguation** | Groq `llama-3.3-70b-versatile` | `~650 ms – 950 ms` | Identifies affected group, delay minutes, and cascade impact |
 | **Action Boundary** | `action-validator.ts` (Zod + Math) | `< 1 ms` | Deterministic verification: 0 overlaps, $\ge$ 30m transit buffer |
-| **Atomic DB Mutation** | Supabase PostgreSQL + Snapshot | `< 20 ms` | State snapshotting with rollback on update error |
+| **Atomic DB Mutation** | PostgreSQL Transaction + Snapshot | `< 20 ms` | State snapshotting with rollback on update error |
 | **Durable Outbox Staging** | `notification_outbox` Table Insert | `< 25 ms` | Persists downstream notices as `pending` before dispatch |
 | **Outbox WhatsApp Worker** | Meta Graph API v21.0 Dispatch | `~300 ms – 600 ms` | Asynchronously delivers vendor notice and marks `dispatched` |
 | **Forensic Audit Log** | `agent_audit_log` Table Insert | `< 15 ms` | Immutable telemetry record of operation, model, and latency |
 | **Total Incident Lifecycle** | Webhook Ingress &rarr; Dispatched Notice | **~2.1 s – 3.4 s** | Automated resolution vs. 35 – 50 mins of manual phone calls |
-
-### Autonomous Resolution Boundary Conditions
-The platform defines strict guardrails for what can be resolved autonomously versus what triggers immediate escalation to human coordinators:
-- **Autonomous Scope:** Single-day operational schedule shifts $\le$ 240 minutes where downstream events can be cascaded while maintaining a minimum 30-minute transit buffer.
-- **Mandatory Human Escalation:** Triggered automatically if:
-  1. A disruption would push an activity outside operational hours (06:00 – 23:45).
-  2. Any immutable booking (e.g. flight departure, train, border transit) is impacted.
-  3. The time shift creates an unavoidable overlap with another confirmed supplier.
-  4. The inbound supplier voice note remains ambiguous between multiple running groups after conversational clarification.
 
 ---
 
@@ -220,59 +329,103 @@ The platform defines strict guardrails for what can be resolved autonomously ver
 
 ```
 Agentic-Travel-Operations/
+├── docs/
+│   ├── images/
+│   │   ├── smart-itinerary-builder.png    # Live UI Itinerary & Operations screenshot
+│   │   └── supplier-sourcing-engine.png   # AI Sourcing & Extraction screenshot
+│   └── security/
+│       └── threat-model.md                # STRIDE Security Threat Model & Mitigation Matrix
+├── scripts/
+│   └── ci-ai-eval-gate.ts                 # Executable CI AI Regression Gate CLI
 ├── src/
 │   ├── app/
-│   │   ├── page.tsx                     # Smart Itinerary Builder & Live Operations Center
-│   │   ├── providers/page.tsx           # AI Supplier Discovery & Extraction Engine
-│   │   ├── forecasting/page.tsx         # Predictive Regional Tourism Demand Forecasting
-│   │   ├── analytics/page.tsx           # Post-Trip Incident & Supplier Performance Analytics
-│   │   ├── deck/page.tsx                # Clean LTR Product Deck & Printable Solution Brief
+│   │   ├── page.tsx                       # Smart Itinerary Builder & Live Operations Center
+│   │   ├── providers/page.tsx             # AI Supplier Discovery & Extraction Engine
+│   │   ├── forecasting/page.tsx           # Predictive Regional Tourism Demand Forecasting
+│   │   ├── analytics/page.tsx             # Post-Trip Incident & Supplier Performance Analytics
+│   │   ├── deck/page.tsx                  # Solution Deck & Printable Brief
 │   │   └── api/
 │   │       ├── ai/
-│   │       │   ├── forecasting/route.ts # Live Llama 3.3 70B Regional Demand Endpoint
-│   │       │   └── analytics/route.ts   # Live Supabase Post-Mortem & Scorecard Endpoint
-│   │       ├── webhooks/whatsapp/route.ts # WhatsApp Webhook (Disambiguation + Cascade)
-│   │       ├── itineraries/route.ts     # Itinerary CRUD with Supabase Realtime
+│   │       │   ├── forecasting/route.ts   # Live Llama 3.3 70B Regional Demand Endpoint
+│   │       │   └── analytics/route.ts     # Live Supabase Post-Mortem Endpoint
+│   │       ├── webhooks/whatsapp/route.ts # WhatsApp Webhook (Ingress + Orchestration)
+│   │       ├── itineraries/route.ts       # Itinerary CRUD with Supabase Realtime
 │   │       └── providers/
-│   │           ├── discover/route.ts    # Unstructured Extraction Pipeline
-│   │           └── match/route.ts       # pgvector Hybrid Semantic Search
+│   │           ├── discover/route.ts      # Unstructured Extraction Pipeline
+│   │           └── match/route.ts         # pgvector Hybrid Semantic Search
 │   ├── components/
 │   │   ├── itinerary/
-│   │   │   ├── SmartItineraryBuilder.tsx # Master Orchestration Component
-│   │   │   ├── TimelineView.tsx          # Dual Ops & Multilingual Notification Timeline
-│   │   │   ├── SmartMatchPanel.tsx       # Semantic Supplier Matching Drawer
-│   │   │   └── TravelerProfileSidebar.tsx # Dietary, Mobility & Nationality Context
+│   │   │   ├── SmartItineraryBuilder.tsx  # Presentation Component (Deconstructed)
+│   │   │   ├── TimelineView.tsx            # Dual Ops & Multilingual Notification Timeline
+│   │   │   ├── SmartMatchPanel.tsx         # Semantic Supplier Matching Drawer
+│   │   │   └── TravelerProfileSidebar.tsx  # Dietary, Mobility & Nationality Context
 │   │   └── layout/
-│   │       └── AppNavbar.tsx             # Multi-tenant Header with Live Routing
+│   │       └── AppNavbar.tsx               # Multi-tenant Header with Live Routing
+│   ├── hooks/
+│   │   └── useItineraryOperations.ts       # Extracted Hook: State, Realtime, Mutations & Scheduling
 │   └── lib/
-│       ├── agent/
-│       │   ├── action-validator.ts       # Deterministic Schedule & Buffer Validation Boundary
-│       │   └── audit-log.ts              # Forensic Audit Logging & DB Durability Tracker
-│       ├── security/
-│       │   └── ssrf.ts                   # DNS & IP Validation Firewall for Web Ingestion
+│       ├── application/
+│       │   └── travel-operations.orchestrator.ts # Pure Class Orchestrator (100% Framework Free)
+│       ├── domain/
+│       │   ├── models/
+│       │   │   └── itinerary-timeline.ts   # TimeSlot Value Object & ItineraryTimeline Aggregate
+│       │   ├── policies/
+│       │   │   └── operational-policy.ts   # StrictOperationalPolicyEngine
+│       │   └── ports/
+│       │       ├── llm.port.ts             # LLMProvider Interface
+│       │       ├── itinerary-repository.port.ts # ItineraryRepository Interface
+│       │       ├── supplier-repository.port.ts  # SupplierRepository Interface
+│       │       └── notification-gateway.port.ts # NotificationGateway Interface
+│       ├── outbox/
+│       │   └── outbox-worker.ts            # Production Outbox Worker (Backoff, Jitter, DLQ)
+│       ├── prompts/
+│       │   ├── types.ts                    # Prompt Metadata & Template Types
+│       │   ├── registry.ts                 # Structured Versioned Prompt Registry
+│       │   ├── intent-classifier/          # v1.0.0, v2.0.0
+│       │   └── orchestrator/               # v1.0.0
+│       ├── telemetry/
+│       │   └── tracer.ts                   # OpenTelemetry Standard Tracer & W3C traceparent
 │       ├── ai/
-│       │   ├── llm-client.ts             # Multi-Model Cascade (Groq / Local / OpenAI)
-│       │   ├── embeddings.ts             # Local In-Process ONNX Vector Generator (384-dim)
-│       │   └── extraction.ts             # Structured Supplier Profile Zod Schema Parser
+│       │   ├── eval-runner.ts              # AI Benchmark Evaluation Runner
+│       │   ├── eval-regression.ts          # AI Regression Detection Engine
+│       │   ├── evaluation-history.ts       # Persistent Commit & Version Evaluator
+│       │   ├── embeddings.ts               # In-Process ONNX Embedding Generator (384-dim)
+│       │   └── extraction.ts               # Structured Supplier Profile Zod Schema Parser
+│       ├── agent/
+│       │   ├── action-validator.ts         # Deterministic Validation Boundary
+│       │   └── audit-log.ts                # Forensic Audit Logging & Durability Tracker
+│       ├── security/
+│       │   ├── ssrf.ts                     # DNS & IP Validation Firewall
+│       │   └── webhook-security.ts         # Constant-Time HMAC-SHA256 Verification
 │       ├── whatsapp/
-│       │   ├── orchestrator.ts           # Autonomous AI Operations Dispatcher (Self-Healing)
-│       │   ├── outbox.ts                 # Durable Database Notification Outbox & Worker
-│       │   ├── intent.ts                 # Multi-Group Disambiguation & Arabic Intent Engine
-│       │   ├── idempotency.ts            # Distributed State-Machine Webhook Idempotency
-│       │   ├── transcription.ts          # Groq Whisper-large-v3 Audio Processing
-│       │   └── sender.ts                 # Meta Cloud API Human-Like Text Dispatcher
+│       │   ├── orchestrator.ts             # Composition Root Factory
+│       │   ├── outbox.ts                   # Outbox Database Staging
+│       │   ├── intent.ts                   # Voice Intent & Multi-Group Disambiguation
+│       │   └── idempotency.ts              # Distributed State-Machine Idempotency
 │       └── supabase/
-│           ├── client.ts                 # Browser Client with Realtime Subscription
-│           └── server.ts                 # Authenticated Server Client with Tenant Session Forwarding
-├── tests/
-│   ├── action-validator.test.ts          # Tests for Overlaps, Transit Buffers & Immutable Bookings
-│   ├── e2e-orchestration.test.ts         # End-to-End Orchestration Contract & Authorization Tests
-│   ├── e2e-webhook-pipeline.test.ts      # Full Pipeline Test from Webhook Ingress to Outbox & Audit
-│   ├── idempotency.test.ts               # Tests for Distributed Lock & Retry State Machine
-│   ├── ssrf.test.ts                      # Tests for DNS Resolution & Private IP Blocking
-│   └── webhook-security.test.ts          # Tests for HMAC-SHA256 Signatures & Timing Safe Comparison
-└── public/
-    └── Agentic_Travel_Operations.html    # Standalone Print-Ready Pitch Document
+│           ├── client.ts                   # Browser Client with Realtime Subscription
+│           └── server.ts                   # Authenticated Server Client with Tenant Forwarding
+└── tests/
+    ├── domain/
+    │   ├── property-based-invariants.test.ts # 100+ Random Permutation Invariant Verification
+    │   ├── outbox-worker.test.ts           # Backoff, Jitter & Dead-Letter Queue Tests
+    │   ├── prompt-versioning.test.ts       # Versioned Prompt Registry Tests
+    │   ├── domain-authorization.test.ts    # Multi-Tenant & Supplier Ownership Tests
+    │   ├── telemetry.test.ts               # W3C traceparent & OTel Span Serializer Tests
+    │   └── invariants.test.ts              # TimeSlot & Timeline Invariant Tests
+    ├── chaos/
+    │   └── load-resilience.test.ts         # 50 Concurrent Requests, Replays & Timeout Tests
+    ├── ai/
+    │   ├── ai-eval.test.ts                 # Full AI Benchmark Evaluation & Regression Tests
+    │   └── evaluation-dataset.ts           # Ground-Truth Benchmark Dataset (v1.2.0)
+    ├── integration/
+    │   └── pipeline-integration.test.ts    # Application Service & Adapters Integration Tests
+    ├── action-validator.test.ts            # Overlaps, Transit Buffers & Immutable Bookings
+    ├── idempotency.test.ts                 # Distributed Lock & Retry State Machine
+    ├── ssrf.test.ts                        # DNS Resolution & Private IP Blocking
+    ├── webhook-security.test.ts            # HMAC-SHA256 Signatures & Timing Safe Comparison
+    ├── e2e-webhook-pipeline.test.ts        # Real Ingress-to-Outbox & Audit Pipeline
+    └── e2e-orchestration.test.ts           # Orchestration Contract & Disambiguation Tests
 ```
 
 ---
@@ -290,7 +443,7 @@ npm install
 Create a `.env.local` file in the root directory:
 
 ```env
-# Supabase Configuration
+# Supabase PostgreSQL Configuration
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 
@@ -302,26 +455,36 @@ WHATSAPP_VERIFY_TOKEN=your_custom_webhook_verify_token
 WHATSAPP_ACCESS_TOKEN=your_meta_system_user_token
 WHATSAPP_PHONE_NUMBER_ID=your_whatsapp_phone_number_id
 
-# (Optional) OpenAI Backup Key
-OPENAI_API_KEY=sk-proj-your_openai_backup_key
-
-# (Optional) Local LLM Integration (Ollama or LM Studio)
-# LOCAL_LLM_URL=http://localhost:11434/v1/chat/completions
-# LOCAL_LLM_MODEL=llama3.2
+# (Optional) OpenTelemetry Endpoint
+# OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318/v1/traces
 ```
 
-### 3. Run the Development Server
+### 3. Run Automated Verification & Test Suite
+```bash
+npm test
+```
+
+### 4. Run the Development Server
 ```bash
 npm run dev
 ```
 Open [http://localhost:3000](http://localhost:3000) to access the platform.
 
-### 4. Key Route Endpoints:
+### 5. Key Application Routes:
 - **Itinerary Builder & Operations:** `http://localhost:3000`
 - **Supplier Discovery Engine:** `http://localhost:3000/providers`
 - **Predictive Demand Forecasting:** `http://localhost:3000/forecasting`
 - **Supplier Performance & Analytics:** `http://localhost:3000/analytics`
 - **Executive Solution Deck & Pitch:** `http://localhost:3000/deck`
+
+---
+
+## Engineering Commitments & Codebase Hygiene
+
+- **0 Code Comments:** Strictly zero `//` or `/* */` comments across all source and test files.
+- **0 Console Statements:** Strictly zero `console.log` in all source and test files.
+- **0 Static Tenant Fallbacks:** No hardcoded fallback UUIDs; all tenant operations are strictly resolved from authenticated session context.
+- **100% Framework Independence:** Core domain models and application services contain zero imports from web or database frameworks.
 
 ---
 
@@ -331,7 +494,7 @@ Open [http://localhost:3000](http://localhost:3000) to access the platform.
 *Senior Software & Agentic AI Systems Engineer*  
 - **Email:** [mohammedneana@gmail.com](mailto:mohammedneana@gmail.com)  
 - **LinkedIn:** [linkedin.com/in/mohammedneanaa](https://www.linkedin.com/in/mohammed-hamdi-b80442145/)  
-- **GitHub:** [github.com/mohammedneana](https://github.com/MohammedNeana)  
+- **GitHub:** [github.com/MohammedNeana](https://github.com/MohammedNeana)  
 
 ---
 

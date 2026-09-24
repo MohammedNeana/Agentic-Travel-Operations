@@ -16,6 +16,11 @@ export function AuthGuard({ children }: AuthGuardProps) {
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
+    if (process.env.NEXT_PUBLIC_DEMO_BYPASS === 'true') {
+      setIsChecking(false);
+      return;
+    }
+
     const supabase = createBrowserSupabaseClient();
 
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -45,7 +50,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
     };
   }, [pathname, router]);
 
-  if (pathname === '/login') {
+  if (pathname === '/login' || process.env.NEXT_PUBLIC_DEMO_BYPASS === 'true') {
     return <>{children}</>;
   }
 

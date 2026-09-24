@@ -1,0 +1,24 @@
+[
+  {
+    "id": "eval-1790206955895",
+    "commitSha": "local-head",
+    "model": "llama-3.3-70b-versatile",
+    "promptVersion": "2.0.0",
+    "datasetVersion": "1.2.0",
+    "timestamp": "2026-09-23T23:42:35.894Z",
+    "metrics": {
+      "totalScenarios": 22,
+      "passedCount": 0,
+      "failedCount": 22,
+      "intentAccuracyPercentage": 0,
+      "disambiguationPrecisionPercentage": 100,
+      "injectionBlockRatePercentage": 100,
+      "meanLatencyMs": 0,
+      "p95LatencyMs": 0
+    },
+    "passedGate": false,
+    "regressions": [
+      "Intent accuracy regressed by 90.0% (current: 0.0%, baseline threshold: 90%, max allowed drop: 2%)"
+    ]
+  }
+]
