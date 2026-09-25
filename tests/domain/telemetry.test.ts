@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   AgentTracer,
   formatTraceparent,
@@ -61,5 +61,40 @@ describe('W3C Trace Context & OpenTelemetry Alignment', () => {
     expect(span.attributes['delayMinutes']).toBe(60);
     expect(typeof span.startTimeUnixNano).toBe('string');
     expect(typeof span.endTimeUnixNano).toBe('string');
+  });
+
+  it('records execution summaries via injected AuditLogPort without infrastructure coupling', async () => {
+    const tracer = new AgentTracer({
+      tenantId: 'tenant-alula-dmc',
+      senderPhone: '966500000001',
+      triggerMessageId: 'msg-trace-002',
+    });
+
+    const mockAuditLog = {
+      record: vi.fn().mockResolvedValue({
+        success: true,
+        persistedToDb: true,
+        operationId: tracer.getContext().agentRunId,
+      }),
+    };
+
+    const result = await tracer.recordSummaryToAuditLog({
+      auditLog: mockAuditLog,
+      operationType: 'schedule_cascade',
+      itineraryId: 'itin-001',
+      validationStatus: 'passed',
+      rationale: 'Automated 60m cascade shift',
+    });
+
+    expect(result.success).toBe(true);
+    expect(mockAuditLog.record).toHaveBeenCalledTimes(1);
+    expect(mockAuditLog.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operationType: 'schedule_cascade',
+        itineraryId: 'itin-001',
+        validationStatus: 'passed',
+        rationale: 'Automated 60m cascade shift',
+      })
+    );
   });
 });

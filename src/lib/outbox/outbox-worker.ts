@@ -253,12 +253,23 @@ export class OutboxWorker {
       };
     }
 
-    const claimed = await this.outboxRepo.claimBatch({
-      workerId: this.workerId,
-      batchSize: this.batchSize,
-      leaseSeconds: Math.max(1, Math.round(this.leaseDurationMs / 1000)),
-      tenantId,
-    });
+    let claimed: OutboxMessageItem[] = [];
+    try {
+      claimed = await this.outboxRepo.claimBatch({
+        workerId: this.workerId,
+        batchSize: this.batchSize,
+        leaseSeconds: Math.max(1, Math.round(this.leaseDurationMs / 1000)),
+        tenantId,
+      });
+    } catch {
+      return {
+        totalProcessed: 0,
+        dispatchedCount: 0,
+        failedCount: 0,
+        deadLetterCount: 0,
+        items: [],
+      };
+    }
 
     let dispatchedCount = 0;
     let failedCount = 0;

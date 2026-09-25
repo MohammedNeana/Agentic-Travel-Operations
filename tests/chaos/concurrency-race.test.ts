@@ -248,6 +248,44 @@ describe('Production Readiness: Concurrency, Distributed Locking & Race Resistan
     expect(gateway.sendTextMessage).toHaveBeenCalledWith('966500001111', 'Your booking is confirmed');
   });
 
+  it('enforces fail-closed safety and avoids unsafe race fallbacks when outbox RPC errors', async () => {
+    const mockRpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { message: 'Database transaction deadlock or connection timeout' },
+    });
+
+    const mockSupabase = {
+      rpc: mockRpc,
+    } as unknown as SupabaseClient;
+
+    const outboxRepo = new SupabaseOutboxAdapter(mockSupabase);
+
+    await expect(
+      outboxRepo.claimBatch({
+        workerId: 'worker-node-beta',
+        batchSize: 10,
+        leaseSeconds: 30,
+      })
+    ).rejects.toThrow('Atomic outbox claim failed via claim_outbox_batch RPC');
+
+    const gateway: NotificationGateway = {
+      sendTextMessage: vi.fn(),
+      stageOutbox: vi.fn(),
+      dispatchOutbox: vi.fn(),
+      fetchPendingOutbox: vi.fn(),
+    };
+
+    const worker = new OutboxWorker(gateway, {
+      workerId: 'worker-node-beta',
+      outboxRepo,
+    });
+
+    const result = await worker.processRepositoryBatch('tenant-test-rpc');
+    expect(result.totalProcessed).toBe(0);
+    expect(result.dispatchedCount).toBe(0);
+    expect(gateway.sendTextMessage).not.toHaveBeenCalled();
+  });
+
   it('manages bounded queues, backpressure drops, retries, and graceful shutdown in BatchSpanProcessor', async () => {
     let callCount = 0;
     const mockFetch = vi.fn().mockImplementation(async () => {

@@ -5,7 +5,7 @@
 [![Supabase pgvector](https://img.shields.io/badge/Supabase-pgvector_%2B_RLS-3ECF8E?logo=supabase&style=flat-square)](https://supabase.com/)
 [![Meta WhatsApp Cloud API](https://img.shields.io/badge/Meta-WhatsApp_Cloud_API-25D366?logo=whatsapp&style=flat-square)](https://developers.facebook.com/docs/whatsapp/cloud-api)
 [![Groq Llama 3.3 70B](https://img.shields.io/badge/Groq-Llama_3.3_70B_%26_Whisper--v3-f55036?style=flat-square)](https://groq.com/)
-[![Vitest](https://img.shields.io/badge/Tests-73%2F73_Passing-brightgreen?logo=vitest&style=flat-square)](tests/)
+[![Vitest](https://img.shields.io/badge/Tests-75%2F75_Passing-brightgreen?logo=vitest&style=flat-square)](tests/)
 [![Architecture](https://img.shields.io/badge/Architecture-DDD_%2B_Hexagonal_Ports-blueviolet?style=flat-square)](src/lib/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
@@ -270,7 +270,7 @@ $$;
 
 #### Hexagonal Outbox Port & Adapter
 - **Port:** [`src/lib/ports/outbox-repository.port.ts`](src/lib/ports/outbox-repository.port.ts) defines `OutboxRepositoryPort` (`claimBatch`, `markDispatched`, `markFailed`, `markDeadLetter`).
-- **Adapter:** [`src/lib/adapters/supabase-outbox.adapter.ts`](src/lib/adapters/supabase-outbox.adapter.ts) executes `claim_outbox_batch` RPC with an atomic fallback for resilience.
+- **Adapter:** [`src/lib/adapters/supabase-outbox.adapter.ts`](src/lib/adapters/supabase-outbox.adapter.ts) executes `claim_outbox_batch` RPC with **strict Fail-Closed distributed semantics** (never degrading to non-atomic SELECT/UPDATE loops that could risk split-brain claims).
 - **Worker Execution:** [`src/lib/outbox/outbox-worker.ts`](src/lib/outbox/outbox-worker.ts) executes `processRepositoryBatch()` to claim batches, invoke the `NotificationGateway`, manage exponential backoff with jitter, and dead-letter failed messages after 5 attempts.
 
 ```mermaid
@@ -401,18 +401,18 @@ flowchart LR
 
 ---
 
-## Automated Test Suites (73 / 73 Passing)
+## Automated Test Suites (75 / 75 Passing)
 
 The test harness runs under **Vitest 3.2** and executes in **~720ms**:
 
 ```bash
  ✓ tests/domain/property-based-invariants.test.ts (3 tests)
  ✓ tests/chaos/load-resilience.test.ts (3 tests)
- ✓ tests/chaos/concurrency-race.test.ts (6 tests)
+ ✓ tests/chaos/concurrency-race.test.ts (7 tests)
  ✓ tests/domain/outbox-worker.test.ts (5 tests)
  ✓ tests/domain/prompt-versioning.test.ts (4 tests)
  ✓ tests/domain/domain-authorization.test.ts (4 tests)
- ✓ tests/domain/telemetry.test.ts (3 tests)
+ ✓ tests/domain/telemetry.test.ts (4 tests)
  ✓ tests/ai/ai-eval.test.ts (6 tests)
  ✓ tests/integration/pipeline-integration.test.ts (2 tests)
  ✓ tests/domain/invariants.test.ts (5 tests)
@@ -424,19 +424,9 @@ The test harness runs under **Vitest 3.2** and executes in **~720ms**:
  ✓ tests/e2e-orchestration.test.ts (2 tests)
 
 Test Files  16 passed (16)
-     Tests  73 passed (73)
+     Tests  75 passed (75)
   Duration  725ms
 ```
-
-### Key Verification Highlights:
-- **True Distributed Outbox Claiming (`FOR UPDATE SKIP LOCKED`):** Multi-worker contention tests verify that concurrent worker replicas claim mutually exclusive subsets of queued notifications with zero race conditions, zero duplicates, and automatic lease recovery on crashed workers.
-- **Production OpenTelemetry Pipeline:** Verifies bounded buffer overflow with `drop_oldest` policy, retry backoff on HTTP 429/503 responses, and graceful `shutdown()` queue flushing.
-- **Worker Crash & Lease Recovery:** Expired leases from crashed workers are automatically reclaimed by healthy workers without losing notifications.
-- **Optimistic Concurrency Control (OCC):** Prevents stale schedule mutations when concurrent coordinators or suppliers update the same itinerary event simultaneously.
-- **Property-Based Invariant Verification:** Tests 100+ random permutations proving that *ANY* overlapping interval, transit buffer deficit ($< 30$ mins), or mutation of locked bookings (`isImmutable: true`) is strictly rejected.
-- **Chaos & Load Resilience:** Verifies handling of 50 concurrent incoming messages, duplicate webhook replay attacks, simulated LLM timeouts, and outbox network failure recovery.
-- **Adversarial Prompt Injection Defense:** Proves 100% block rate against attempts to override operational boundaries via malicious voice or text instructions.
-- **SSRF Defense:** Blocks DNS rebinding, localhost loopbacks, link-local metadata addresses (`169.254.169.254`), and private RFC 1918 subnets.
 
 ---
 

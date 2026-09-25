@@ -1,10 +1,9 @@
 import crypto from 'crypto';
-import {
+import type {
   AgentOperationType,
-  AgentAuditEntry,
   AuditRecordResult,
-  recordAgentOperation,
-} from '@/lib/agent/audit-log';
+  AuditLogPort,
+} from '@/lib/ports/audit-log.port';
 import { OtelHttpSpanExporter, OtelExportResult } from './otlp-exporter';
 
 export interface TraceContext {
@@ -173,6 +172,7 @@ export class AgentTracer {
   }
 
   async recordSummaryToAuditLog(params: {
+    auditLog: AuditLogPort;
     operationType: AgentOperationType;
     itineraryId?: string;
     eventId?: string;
@@ -182,7 +182,7 @@ export class AgentTracer {
     violations?: string[];
     extraMetadata?: Record<string, unknown>;
   }): Promise<AuditRecordResult> {
-    return recordAgentOperation({
+    return params.auditLog.record({
       operationId: this.context.agentRunId,
       operationType: params.operationType,
       tenantId: this.context.tenantId,
