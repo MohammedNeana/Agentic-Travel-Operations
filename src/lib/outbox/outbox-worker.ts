@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { NotificationGateway } from '@/lib/ports/notification.port';
+import type { OutboxRepositoryPort } from '@/lib/ports/outbox-repository.port';
 
 export type OutboxDeliveryStatus =
   | 'pending'
@@ -15,6 +16,7 @@ export interface OutboxWorkerConfig {
   batchSize?: number;
   workerId?: string;
   leaseDurationMs?: number;
+  outboxRepo?: OutboxRepositoryPort;
 }
 
 export interface OutboxMessageItem {
@@ -75,6 +77,7 @@ export class OutboxWorker {
   private readonly batchSize: number;
   private readonly workerId: string;
   private readonly leaseDurationMs: number;
+  private readonly outboxRepo?: OutboxRepositoryPort;
 
   constructor(
     private readonly gateway: NotificationGateway,
@@ -86,10 +89,15 @@ export class OutboxWorker {
     this.batchSize = config?.batchSize ?? 20;
     this.workerId = config?.workerId ?? crypto.randomUUID();
     this.leaseDurationMs = config?.leaseDurationMs ?? 30000;
+    this.outboxRepo = config?.outboxRepo;
   }
 
   getWorkerId(): string {
     return this.workerId;
+  }
+
+  getOutboxRepository(): OutboxRepositoryPort | undefined {
+    return this.outboxRepo;
   }
 
   createItem(params: {
@@ -231,6 +239,78 @@ export class OutboxWorker {
       failedCount,
       deadLetterCount,
       items,
+    };
+  }
+
+  async processRepositoryBatch(tenantId?: string): Promise<OutboxBatchResult> {
+    if (!this.outboxRepo) {
+      return {
+        totalProcessed: 0,
+        dispatchedCount: 0,
+        failedCount: 0,
+        deadLetterCount: 0,
+        items: [],
+      };
+    }
+
+    const claimed = await this.outboxRepo.claimBatch({
+      workerId: this.workerId,
+      batchSize: this.batchSize,
+      leaseSeconds: Math.max(1, Math.round(this.leaseDurationMs / 1000)),
+      tenantId,
+    });
+
+    let dispatchedCount = 0;
+    let failedCount = 0;
+    let deadLetterCount = 0;
+
+    for (const item of claimed) {
+      try {
+        const sendResult = await this.gateway.sendTextMessage(item.recipientPhone, item.message);
+        if (sendResult.success) {
+          const nowIso = new Date().toISOString();
+          item.status = 'dispatched';
+          item.dispatchedAt = nowIso;
+          await this.outboxRepo.markDispatched(item.id, nowIso, item.tenantId);
+          dispatchedCount += 1;
+        } else {
+          const errMsg = sendResult.error || 'Gateway returned non-success response';
+          item.lastError = errMsg;
+          if (item.attempts >= item.maxAttempts) {
+            item.status = 'dead_letter';
+            item.deadLetterReason = `Max retry attempts (${item.maxAttempts}) exceeded: ${errMsg}`;
+            await this.outboxRepo.markDeadLetter(item.id, item.deadLetterReason, item.tenantId);
+            deadLetterCount += 1;
+          } else {
+            item.status = 'failed';
+            const nextRetry = Date.now() + computeExponentialBackoffMs(item.attempts, this.baseBackoffMs, this.maxBackoffMs);
+            await this.outboxRepo.markFailed(item.id, nextRetry, errMsg, item.tenantId);
+            failedCount += 1;
+          }
+        }
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        item.lastError = errMsg;
+        if (item.attempts >= item.maxAttempts) {
+          item.status = 'dead_letter';
+          item.deadLetterReason = `Max retry attempts (${item.maxAttempts}) exceeded: ${errMsg}`;
+          await this.outboxRepo.markDeadLetter(item.id, item.deadLetterReason, item.tenantId);
+          deadLetterCount += 1;
+        } else {
+          item.status = 'failed';
+          const nextRetry = Date.now() + computeExponentialBackoffMs(item.attempts, this.baseBackoffMs, this.maxBackoffMs);
+          await this.outboxRepo.markFailed(item.id, nextRetry, errMsg, item.tenantId);
+          failedCount += 1;
+        }
+      }
+    }
+
+    return {
+      totalProcessed: claimed.length,
+      dispatchedCount,
+      failedCount,
+      deadLetterCount,
+      items: claimed,
     };
   }
 

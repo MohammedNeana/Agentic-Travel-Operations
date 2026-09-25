@@ -2,7 +2,9 @@ import { describe, it, expect, vi } from 'vitest';
 import { OutboxWorker, OutboxMessageItem } from '@/lib/outbox/outbox-worker';
 import { NotificationGateway } from '@/lib/ports/notification.port';
 import { AgentTracer } from '@/lib/observability/telemetry';
-import { OtelHttpSpanExporter } from '@/lib/observability/otlp-exporter';
+import { OtelHttpSpanExporter, BatchSpanProcessor } from '@/lib/observability/otlp-exporter';
+import { SupabaseOutboxAdapter } from '@/lib/adapters/supabase-outbox.adapter';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 describe('Production Readiness: Concurrency, Distributed Locking & Race Resistance', () => {
   it('guarantees zero duplicate deliveries when multiple workers contend for the same outbox items', async () => {
@@ -179,5 +181,128 @@ describe('Production Readiness: Concurrency, Distributed Locking & Race Resistan
     const failureResult = await failingExporter.export(otelSpans);
     expect(failureResult.success).toBe(false);
     expect(failureResult.error).toContain('Connection refused');
+  });
+
+  it('claims and dispatches batches via SupabaseOutboxAdapter with RPC claiming', async () => {
+    const mockRpc = vi.fn().mockResolvedValue({
+      data: [
+        {
+          id: 'outbox-rpc-1',
+          tenant_id: 'tenant-test-rpc',
+          event_id: 'evt-1',
+          recipient_phone: '966500001111',
+          provider_name: 'Desert Safari AlUla',
+          message_payload: 'Your booking is confirmed',
+          status: 'processing',
+          attempts: 1,
+          idempotency_key: 'idemp-1',
+          created_at: new Date().toISOString(),
+          locked_by: 'worker-node-alpha',
+          locked_at: new Date().toISOString(),
+          lease_expires_at: new Date(Date.now() + 30000).toISOString(),
+        },
+      ],
+      error: null,
+    });
+
+    const mockUpdate = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnThis(),
+    });
+
+    const mockSupabase = {
+      rpc: mockRpc,
+      from: vi.fn().mockReturnValue({
+        update: mockUpdate,
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        order: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockResolvedValue({ data: [] }),
+      }),
+    } as unknown as SupabaseClient;
+
+    const outboxRepo = new SupabaseOutboxAdapter(mockSupabase);
+
+    const gateway: NotificationGateway = {
+      sendTextMessage: vi.fn().mockResolvedValue({ success: true, messageId: 'msg-delivered-1' }),
+      stageOutbox: vi.fn().mockResolvedValue([]),
+      dispatchOutbox: vi.fn().mockResolvedValue({ dispatchedCount: 0, updatedNotices: [] }),
+      fetchPendingOutbox: vi.fn().mockResolvedValue([]),
+    };
+
+    const worker = new OutboxWorker(gateway, {
+      workerId: 'worker-node-alpha',
+      batchSize: 10,
+      outboxRepo,
+    });
+
+    const result = await worker.processRepositoryBatch('tenant-test-rpc');
+    expect(result.totalProcessed).toBe(1);
+    expect(result.dispatchedCount).toBe(1);
+    expect(result.failedCount).toBe(0);
+    expect(mockRpc).toHaveBeenCalledWith('claim_outbox_batch', {
+      p_worker_id: 'worker-node-alpha',
+      p_batch_size: 10,
+      p_lease_seconds: 30,
+      p_tenant_id: 'tenant-test-rpc',
+    });
+    expect(gateway.sendTextMessage).toHaveBeenCalledWith('966500001111', 'Your booking is confirmed');
+  });
+
+  it('manages bounded queues, backpressure drops, retries, and graceful shutdown in BatchSpanProcessor', async () => {
+    let callCount = 0;
+    const mockFetch = vi.fn().mockImplementation(async () => {
+      callCount += 1;
+      if (callCount === 1) {
+        return { ok: false, status: 503 };
+      }
+      return { ok: true, status: 200 };
+    });
+
+    const exporter = new OtelHttpSpanExporter({
+      endpoint: 'http://localhost:4318/v1/traces',
+      maxRetries: 2,
+      retryBackoffBaseMs: 10,
+      fetchFn: mockFetch,
+    });
+
+    const processor = new BatchSpanProcessor({
+      exporter,
+      maxQueueSize: 3,
+      maxBatchSize: 10,
+      scheduledDelayMillis: 0,
+      dropPolicy: 'drop_oldest',
+    });
+
+    const createDummySpan = (name: string) => ({
+      name,
+      context: { traceId: '0123456789abcdef0123456789abcdef', spanId: '0123456789abcdef', traceFlags: 1 },
+      kind: 'INTERNAL' as const,
+      startTimeUnixNano: '1000000',
+      endTimeUnixNano: '2000000',
+      attributes: { testKey: name },
+      status: { code: 'OK' as const },
+    });
+
+    processor.onEmit(createDummySpan('span-1'));
+    processor.onEmit(createDummySpan('span-2'));
+    processor.onEmit(createDummySpan('span-3'));
+    processor.onEmit(createDummySpan('span-4'));
+
+    const statsBefore = processor.getStats();
+    expect(statsBefore.queueSize).toBe(3);
+    expect(statsBefore.totalEmitted).toBe(4);
+    expect(statsBefore.totalDropped).toBe(1);
+
+    const flushResult = await processor.flushBatch();
+    expect(flushResult.success).toBe(true);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+
+    await processor.shutdown();
+    const statsAfter = processor.getStats();
+    expect(statsAfter.isShutdown).toBe(true);
+    expect(statsAfter.queueSize).toBe(0);
+
+    processor.onEmit(createDummySpan('span-after-shutdown'));
+    expect(processor.getStats().totalDropped).toBe(2);
   });
 });

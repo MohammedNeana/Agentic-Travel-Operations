@@ -4,6 +4,8 @@ export interface OtelExporterConfig {
   endpoint?: string;
   headers?: Record<string, string>;
   timeoutMs?: number;
+  maxRetries?: number;
+  retryBackoffBaseMs?: number;
   fetchFn?: typeof fetch;
 }
 
@@ -14,10 +16,29 @@ export interface OtelExportResult {
   error?: string;
 }
 
+export interface BatchSpanProcessorConfig {
+  exporter: OtelHttpSpanExporter;
+  maxQueueSize?: number;
+  maxBatchSize?: number;
+  scheduledDelayMillis?: number;
+  dropPolicy?: 'drop_oldest' | 'drop_newest';
+}
+
+export interface BatchProcessorStats {
+  queueSize: number;
+  totalEmitted: number;
+  totalExported: number;
+  totalDropped: number;
+  totalFailed: number;
+  isShutdown: boolean;
+}
+
 export class OtelHttpSpanExporter {
   private readonly endpoint?: string;
   private readonly headers: Record<string, string>;
   private readonly timeoutMs: number;
+  private readonly maxRetries: number;
+  private readonly retryBackoffBaseMs: number;
   private readonly fetchImpl: typeof fetch;
 
   constructor(config?: OtelExporterConfig) {
@@ -27,6 +48,8 @@ export class OtelHttpSpanExporter {
       ...(config?.headers || {}),
     };
     this.timeoutMs = config?.timeoutMs ?? 5000;
+    this.maxRetries = config?.maxRetries ?? 3;
+    this.retryBackoffBaseMs = config?.retryBackoffBaseMs ?? 200;
     this.fetchImpl = config?.fetchFn || globalThis.fetch;
   }
 
@@ -108,41 +131,167 @@ export class OtelHttpSpanExporter {
     }
 
     const payload = this.buildOtlpPayload(spans);
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    let lastError: string | undefined;
+    let lastStatusCode: number | undefined;
 
-    try {
-      const response = await this.fetchImpl(this.endpoint, {
-        method: 'POST',
-        headers: this.headers,
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      });
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
 
-      clearTimeout(timer);
+      try {
+        const response = await this.fetchImpl(this.endpoint, {
+          method: 'POST',
+          headers: this.headers,
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
 
-      if (response.ok) {
-        return {
-          success: true,
-          exportedCount: spans.length,
-          statusCode: response.status,
-        };
+        clearTimeout(timer);
+        lastStatusCode = response.status;
+
+        if (response.ok) {
+          return {
+            success: true,
+            exportedCount: spans.length,
+            statusCode: response.status,
+          };
+        }
+
+        const isRetryable = response.status === 429 || response.status >= 500;
+        lastError = `OTLP collector returned HTTP ${response.status}`;
+
+        if (!isRetryable || attempt === this.maxRetries) {
+          break;
+        }
+
+        const backoffMs = this.retryBackoffBaseMs * Math.pow(2, attempt - 1);
+        await new Promise((resolve) => setTimeout(resolve, backoffMs));
+      } catch (err) {
+        clearTimeout(timer);
+        const errMsg = err instanceof Error ? err.message : String(err);
+        lastError = `OTLP collector network error: ${errMsg}`;
+
+        if (attempt === this.maxRetries) {
+          break;
+        }
+
+        const backoffMs = this.retryBackoffBaseMs * Math.pow(2, attempt - 1);
+        await new Promise((resolve) => setTimeout(resolve, backoffMs));
       }
-
-      return {
-        success: false,
-        exportedCount: 0,
-        statusCode: response.status,
-        error: `OTLP collector returned HTTP ${response.status}`,
-      };
-    } catch (err) {
-      clearTimeout(timer);
-      const errMsg = err instanceof Error ? err.message : String(err);
-      return {
-        success: false,
-        exportedCount: 0,
-        error: `OTLP collector network error: ${errMsg}`,
-      };
     }
+
+    return {
+      success: false,
+      exportedCount: 0,
+      statusCode: lastStatusCode,
+      error: lastError,
+    };
+  }
+}
+
+export class BatchSpanProcessor {
+  private readonly exporter: OtelHttpSpanExporter;
+  private readonly maxQueueSize: number;
+  private readonly maxBatchSize: number;
+  private readonly scheduledDelayMillis: number;
+  private readonly dropPolicy: 'drop_oldest' | 'drop_newest';
+
+  private queue: OtelReadableSpan[] = [];
+  private totalEmitted = 0;
+  private totalExported = 0;
+  private totalDropped = 0;
+  private totalFailed = 0;
+  private isShutdown = false;
+  private timer?: NodeJS.Timeout;
+
+  constructor(config: BatchSpanProcessorConfig) {
+    this.exporter = config.exporter;
+    this.maxQueueSize = config.maxQueueSize ?? 2048;
+    this.maxBatchSize = config.maxBatchSize ?? 64;
+    this.scheduledDelayMillis = config.scheduledDelayMillis ?? 5000;
+    this.dropPolicy = config.dropPolicy ?? 'drop_oldest';
+
+    this.startPeriodicExport();
+  }
+
+  private startPeriodicExport(): void {
+    if (this.scheduledDelayMillis > 0 && typeof setInterval !== 'undefined') {
+      this.timer = setInterval(() => {
+        void this.flushBatch();
+      }, this.scheduledDelayMillis);
+      if (this.timer && typeof this.timer.unref === 'function') {
+        this.timer.unref();
+      }
+    }
+  }
+
+  onEmit(span: OtelReadableSpan): void {
+    if (this.isShutdown) {
+      this.totalDropped += 1;
+      return;
+    }
+
+    this.totalEmitted += 1;
+
+    if (this.queue.length >= this.maxQueueSize) {
+      this.totalDropped += 1;
+      if (this.dropPolicy === 'drop_oldest') {
+        this.queue.shift();
+        this.queue.push(span);
+      }
+      return;
+    }
+
+    this.queue.push(span);
+
+    if (this.queue.length >= this.maxBatchSize) {
+      void this.flushBatch();
+    }
+  }
+
+  async flushBatch(): Promise<OtelExportResult> {
+    if (this.queue.length === 0) {
+      return { success: true, exportedCount: 0 };
+    }
+
+    const batch = this.queue.splice(0, this.maxBatchSize);
+    const result = await this.exporter.export(batch);
+
+    if (result.success) {
+      this.totalExported += result.exportedCount;
+    } else {
+      this.totalFailed += batch.length;
+    }
+
+    return result;
+  }
+
+  async forceFlush(): Promise<void> {
+    while (this.queue.length > 0) {
+      await this.flushBatch();
+    }
+  }
+
+  async shutdown(): Promise<void> {
+    if (this.isShutdown) {
+      return;
+    }
+    this.isShutdown = true;
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = undefined;
+    }
+    await this.forceFlush();
+  }
+
+  getStats(): BatchProcessorStats {
+    return {
+      queueSize: this.queue.length,
+      totalEmitted: this.totalEmitted,
+      totalExported: this.totalExported,
+      totalDropped: this.totalDropped,
+      totalFailed: this.totalFailed,
+      isShutdown: this.isShutdown,
+    };
   }
 }
