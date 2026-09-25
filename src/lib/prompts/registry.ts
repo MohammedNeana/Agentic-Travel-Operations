@@ -2,6 +2,7 @@ import { PromptDefinition } from './types';
 import { intentClassifierPromptV1 } from './intent-classifier/v1';
 import { intentClassifierPromptV2 } from './intent-classifier/v2';
 import { orchestratorPromptV1 } from './orchestrator/v1';
+import { itineraryPromptV1 } from './itinerary/v1';
 
 const promptRegistry = new Map<string, Map<string, PromptDefinition<any>>>();
 
@@ -16,6 +17,7 @@ function registerPrompt(prompt: PromptDefinition<any>): void {
 registerPrompt(intentClassifierPromptV1);
 registerPrompt(intentClassifierPromptV2);
 registerPrompt(orchestratorPromptV1);
+registerPrompt(itineraryPromptV1);
 
 export function getPrompt<TInput = Record<string, unknown>>(
   id: string,

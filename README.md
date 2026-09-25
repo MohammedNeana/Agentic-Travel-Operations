@@ -5,7 +5,7 @@
 [![Supabase pgvector](https://img.shields.io/badge/Supabase-pgvector_%2B_RLS-3ECF8E?logo=supabase&style=flat-square)](https://supabase.com/)
 [![Meta WhatsApp Cloud API](https://img.shields.io/badge/Meta-WhatsApp_Cloud_API-25D366?logo=whatsapp&style=flat-square)](https://developers.facebook.com/docs/whatsapp/cloud-api)
 [![Groq Llama 3.3 70B](https://img.shields.io/badge/Groq-Llama_3.3_70B_%26_Whisper--v3-f55036?style=flat-square)](https://groq.com/)
-[![Vitest](https://img.shields.io/badge/Tests-75%2F75_Passing-brightgreen?logo=vitest&style=flat-square)](tests/)
+[![Vitest](https://img.shields.io/badge/Tests-84%2F84_Passing-brightgreen?logo=vitest&style=flat-square)](tests/)
 [![Architecture](https://img.shields.io/badge/Architecture-DDD_%2B_Hexagonal_Ports-blueviolet?style=flat-square)](src/lib/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
@@ -161,27 +161,31 @@ sequenceDiagram
 
 ---
 
-## Hexagonal Clean Architecture (Domain Isolation)
+## Hexagonal Clean Architecture & Automated Boundary Enforcement
 
 The platform strictly isolates core business rules from web frameworks, database drivers, and AI vendor SDKs:
 
 ```
 src/
+├── prompts/                  ◄── FIRST-CLASS PROMPT REGISTRY (Standardized Location)
+│   ├── intent/               # v1.ts, v2.ts (Dialect-tuned intent classifiers)
+│   ├── itinerary/            # v1.ts (Saudi destination planner)
+│   ├── operations/           # v1.ts (Operational disruption orchestrator)
+│   └── prompt-registry.ts    # Central registry & type re-exports
 ├── lib/
 │   ├── domain/               ◄── PURE TYPESCRIPT (Zero external dependencies)
 │   │   ├── models/           # Value Objects (TimeSlot) & Aggregate Roots (ItineraryTimeline)
 │   │   ├── policies/         # StrictOperationalPolicyEngine
-│   │   └── ports/            # Abstract Interfaces (LLMProvider, Repositories, Gateway)
+│   │   └── ports/            # Abstract Interfaces (LLMProvider, Repositories, Gateway, AuditLog)
 │   ├── application/          ◄── FRAMEWORK-INDEPENDENT APPLICATION SERVICES
-│   │   └── travel-operations.orchestrator.ts # Core orchestration workflow
+│   │   ├── travel-operations.orchestrator.ts # Thin coordinator (~220 lines)
+│   │   ├── semantic-authorization.guard.ts   # Supplier-event ownership & security guard
+│   │   └── cascade-shift-planner.ts          # Mathematical shift planner & notification crafter
 │   ├── outbox/               ◄── DURABLE ASYNCHRONOUS WORKER
 │   │   └── outbox-worker.ts  # Exponential backoff, jitter, dead-letter queue
-│   ├── prompts/              ◄── STRUCTURED PROMPT REGISTRY
-│   │   ├── registry.ts       # Versioned prompt selector & fallback engine
-│   │   ├── intent-classifier/ # v1.0.0, v2.0.0 (Dialect-tuned prompts)
-│   │   └── orchestrator/     # v1.0.0 (Operational decision prompts)
-│   ├── telemetry/            ◄── OPENTELEMETRY TRACING
-│   │   └── tracer.ts         # W3C traceparent headers, 32-hex traceId, 16-hex spanId
+│   ├── observability/        ◄── NON-BLOCKING OPENTELEMETRY TRACING
+│   │   ├── telemetry.ts      # AgentTracer, W3C traceparent headers (zero infrastructure leaks)
+│   │   └── otlp-exporter.ts  # Bounded BatchSpanProcessor & OtelHttpSpanExporter
 │   ├── ai/                   ◄── EVALUATION & BENCHMARKS
 │   │   ├── eval-runner.ts    # Evaluation benchmark execution engine
 │   │   ├── eval-regression.ts# Regression threshold verification
@@ -192,6 +196,18 @@ src/
 │   └── whatsapp/             ◄── INFRASTRUCTURE ADAPTERS & COMPOSITION ROOT
 │       └── orchestrator.ts   # Dependency injection composition root
 ```
+
+### Orchestrator Deconstruction (Single Responsibility Principle)
+The previous monolithic orchestrator was decomposed into cohesive, single-responsibility collaborators:
+1. **[`SemanticAuthorizationGuard`](src/lib/application/semantic-authorization.guard.ts):** Validates incoming sender phone numbers against the assigned supplier for the target itinerary event. Emits security audit events if an unauthorized party attempts modifications.
+2. **[`CascadeShiftPlanner`](src/lib/application/cascade-shift-planner.ts):** Coordinates LLM disruption reasoning, calculates cascading delays, enforces transit buffer minimums, preserves immutable events (flights, border crossings), and crafts culturally authentic Arabic notices and multilingual traveler messages. Includes deterministic mathematical fallback when LLM is unavailable.
+3. **[`TravelOperationsOrchestrator`](src/lib/application/travel-operations.orchestrator.ts):** A lean coordinator delegating to the guard, planner, action validator, repositories, and notification gateway.
+
+### Automated Architectural Boundary Fitness Tests
+To prevent accidental architectural drift or dependency leaks, automated fitness tests in [`tests/architecture/hexagonal-boundaries.test.ts`](tests/architecture/hexagonal-boundaries.test.ts) enforce import rules:
+- **Domain Layer (`src/lib/domain`):** Zero imports of `@supabase/`, `@/lib/supabase`, `next/`, `groq-sdk`, `@/lib/adapters`, or `@/lib/agent/audit-log`.
+- **Application Layer (`src/lib/application`):** Zero imports of database drivers or framework dependencies. All data and telemetry operations flow through abstract ports.
+- **Observability Layer (`src/lib/observability`):** Zero transitive leaks into Supabase or database storage. Telemetry exclusively consumes the abstract `AuditLogPort`.
 
 ---
 
@@ -289,6 +305,12 @@ stateDiagram-v2
 
 ### Exponential Backoff & Jitter Equation
 $$\text{delay} = \min\left(\text{maxDelayMs}, \text{baseDelayMs} \times 2^{\text{attempt}}\right) + \text{randomJitter}$$
+
+### Explicit Distributed Delivery Semantics
+- **At-Least-Once Outbox Delivery Guarantee:** All downstream supplier notifications and traveler messages are committed transactionally to PostgreSQL before dispatch. If a worker pod crashes or restarts mid-flight, the unacknowledged lease expires and is automatically recovered and re-claimed by surviving worker instances.
+- **Effectively-Once Processing via Idempotency:** Incoming webhook messages are guarded by HMAC-SHA256 signature verification and atomic `whatsapp_messages` state transitions. Duplicate or replayed webhook events return HTTP 200 immediately without re-invoking LLM inference or mutating itinerary records.
+- **Exactly-Once Distributed Claiming (`FOR UPDATE SKIP LOCKED`):** The PL/pgSQL function `claim_outbox_batch` partitions the outbox queue atomically across horizontal worker replicas. Zero duplicate claims occur across concurrent instances under high contention.
+- **Fail-Closed Distributed Safety:** The outbox adapter strictly aborts claim operations if RPC execution encounters unexpected errors, triggering worker backoff rather than falling back to non-atomic SELECT/UPDATE loops that could risk split-brain claims.
 
 ---
 
@@ -398,12 +420,38 @@ flowchart LR
 3. **Batched Network Dispatch (`maxBatchSize: 64`, `scheduledDelayMillis: 5000`):** Groups spans into high-density OTLP JSON payloads, reducing network socket churn by up to 98%.
 4. **Transient Error Resilience with Exponential Backoff:** Automatically retries HTTP 429 (rate limited) and HTTP 5xx responses with geometric backoff (`200ms`, `400ms`, `800ms`) and request timeouts via `AbortController`.
 5. **Zero-Loss Graceful Termination (`shutdown()`):** Intercepts container shutdown signals, disarms background timers, and triggers an atomic `forceFlush()` to drain pending spans before the process terminates.
+6. **Non-Blocking Observability Invariant:** Telemetry backend failure (e.g. OTLP collector network outage, HTTP 503, DNS timeout) must NEVER fail or interrupt core business transactions. `AgentTracer` and `BatchSpanProcessor` catch and suppress transport errors safely. Verified in [`tests/integration/failure-modes.test.ts`](tests/integration/failure-modes.test.ts).
 
 ---
 
-## Automated Test Suites (75 / 75 Passing)
+## Technical Guarantees & Operational Claims
 
-The test harness runs under **Vitest 3.2** and executes in **~720ms**:
+To maintain engineering transparency and distinguish between code invariants and deployment benchmarks:
+
+### 1. Implemented Guarantees (Formally Enforced & Tested Invariants)
+- **Domain Invariants:** Strict mathematical verification that no two activities overlap and all adjacent activities preserve $\ge 30$ minutes of transit buffer time.
+- **Immutable Booking Protection:** Fixed flight departures, border crossings, and train reservations cannot be modified, delayed, or canceled by LLM cascade proposals.
+- **Zero Transitive Leakage:** Automated architectural boundary tests (`tests/architecture/hexagonal-boundaries.test.ts`) assert that Domain, Application, and Observability layers have zero imports of `@supabase/`, `next/`, `groq-sdk`, or infrastructure adapters.
+- **Fail-Closed Distributed Outbox:** PostgreSQL stored procedure `claim_outbox_batch` with `FOR UPDATE SKIP LOCKED` guarantees exactly-once row partition with fail-closed safety (zero fallback to non-atomic queries).
+- **Perimeter Security:** Constant-time HMAC-SHA256 signature verification (`crypto.timingSafeEqual`) and SSRF IP blocklists protecting against loopback/RFC1918 egress attacks.
+- **Fail-Safe Observability:** Complete isolation of telemetry failures from business workflows.
+
+### 2. Measured Benchmarks (Tested Under Vitest / Local Environment)
+- **Test Suite Pass Rate:** **84 / 84 tests passing** across 18 specialized test suites in **~1.06s**.
+- **Automated AI PR Gate:** Sub-second deterministic evaluation validating 100% intent accuracy, 100% disambiguation precision, and 100% prompt injection blocking.
+- **Concurrency & Race Resistance:** Verified mutual exclusion under a 50-request concurrent lock storm and zero duplicate claims across concurrent workers.
+- **In-Process Vector Generation:** Sub-30ms local ONNX 384-dimensional embedding computation.
+
+### 3. Production Expectations (Cloud & Network Dependencies)
+- **WhatsApp Cloud API Latency:** Real-world webhook egress to Meta Graph API typically ranges between 250ms – 600ms depending on Meta proxy geographic region.
+- **Groq API Live Inference:** Live LLM completion (`llama-3.3-70b-versatile`) latency ranges between 600ms – 1200ms depending on token length and concurrency tier.
+- **Connection Pooling:** In production serverless/Kubernetes environments, PostgreSQL connections should be proxied via Supabase Transaction Pooler (PgBouncer) on port 6543.
+
+---
+
+## Automated Test Suites (84 / 84 Passing)
+
+The test harness runs under **Vitest 3.2** and executes in **~1.06s**:
 
 ```bash
  ✓ tests/domain/property-based-invariants.test.ts (3 tests)
@@ -415,6 +463,8 @@ The test harness runs under **Vitest 3.2** and executes in **~720ms**:
  ✓ tests/domain/telemetry.test.ts (4 tests)
  ✓ tests/ai/ai-eval.test.ts (6 tests)
  ✓ tests/integration/pipeline-integration.test.ts (2 tests)
+ ✓ tests/integration/failure-modes.test.ts (6 tests)
+ ✓ tests/architecture/hexagonal-boundaries.test.ts (3 tests)
  ✓ tests/domain/invariants.test.ts (5 tests)
  ✓ tests/action-validator.test.ts (8 tests)
  ✓ tests/idempotency.test.ts (8 tests)
@@ -423,10 +473,19 @@ The test harness runs under **Vitest 3.2** and executes in **~720ms**:
  ✓ tests/e2e-webhook-pipeline.test.ts (4 tests)
  ✓ tests/e2e-orchestration.test.ts (2 tests)
 
-Test Files  16 passed (16)
-     Tests  75 passed (75)
-  Duration  725ms
+Test Files  18 passed (18)
+     Tests  84 passed (84)
+  Duration  1.06s
 ```
+
+### Failure-Oriented Integration Resilience Testing
+[`tests/integration/failure-modes.test.ts`](tests/integration/failure-modes.test.ts) exercises critical failure modes to verify production recovery:
+1. **LLM Invariant Violation / Timeout:** When LLM suggests moving an immutable flight, the action validator blocks the proposal; target event is marked escalated and zero database mutations occur.
+2. **Notification Gateway Network Outage:** When Meta WhatsApp API experiences HTTP 504 gateway timeout, database updates remain committed, and notices remain staged in outbox for automatic background retry.
+3. **Duplicate Webhook Delivery:** When Meta sends identical webhook payloads concurrently, idempotency lease suppresses re-processing without duplicate DB mutations.
+4. **Optimistic Concurrency Control (OCC) Race:** When two operations attempt concurrent modification of the same itinerary event, the version conflict triggers a graceful transaction abort and rollback.
+5. **Observability Collector Outage:** When OTLP collector is unreachable (ECONNREFUSED / 503), the business transaction completes successfully with zero unhandled exceptions.
+6. **Unauthorized Vendor Phone:** When an unassigned phone number attempts schedule shifts, `SemanticAuthorizationGuard` halts execution, prevents DB corruption, and writes a forensic security audit entry.
 
 ---
 
@@ -508,9 +567,20 @@ Agentic-Travel-Operations/
 │   │       └── AppNavbar.tsx               # Multi-tenant Header with Live Routing
 │   ├── hooks/
 │   │   └── useItineraryOperations.ts       # Extracted Hook: State, Realtime, Mutations & Scheduling
+│   ├── prompts/
+│   │   ├── intent/
+│   │   │   ├── v1.ts                       # Dialect v1 prompt
+│   │   │   └── v2.ts                       # Multi-group dialect v2 prompt
+│   │   ├── itinerary/
+│   │   │   └── v1.ts                       # Saudi itinerary planner prompt
+│   │   ├── operations/
+│   │   │   └── v1.ts                       # Operational disruption orchestrator prompt
+│   │   └── prompt-registry.ts              # Central registry export
 │   └── lib/
 │       ├── application/
-│       │   └── travel-operations.orchestrator.ts # Pure Class Orchestrator (100% Framework Free)
+│       │   ├── travel-operations.orchestrator.ts # Lean coordinator delegating across ports
+│       │   ├── semantic-authorization.guard.ts   # Supplier-event ownership authorization guard
+│       │   └── cascade-shift-planner.ts          # Shift planning, transit buffers & fallbacks
 │       ├── domain/
 │       │   ├── models/
 │       │   │   └── itinerary-timeline.ts   # TimeSlot Value Object & ItineraryTimeline Aggregate
@@ -527,7 +597,7 @@ Agentic-Travel-Operations/
 │       │   ├── groq-llm.adapter.ts         # LLMProvider Groq Adapter
 │       │   ├── supabase-repository.adapter.ts # Repositories Supabase Adapter
 │       │   ├── supabase-audit.adapter.ts   # AuditLogPort Supabase Adapter
-│       │   ├── supabase-outbox.adapter.ts  # OutboxRepositoryPort Supabase Adapter
+│       │   ├── supabase-outbox.adapter.ts  # OutboxRepositoryPort Supabase Adapter (Fail-Closed)
 │       │   └── whatsapp-notification.adapter.ts # Notification WhatsApp Adapter
 │       ├── outbox/
 │       │   └── outbox-worker.ts            # Production Outbox Worker (Distributed Claims, DLQ)
@@ -535,10 +605,11 @@ Agentic-Travel-Operations/
 │       │   ├── types.ts                    # Prompt Metadata & Template Types
 │       │   ├── registry.ts                 # Structured Versioned Prompt Registry
 │       │   ├── intent-classifier/          # v1.0.0, v2.0.0
+│       │   ├── itinerary/                  # v1.0.0
 │       │   └── orchestrator/               # v1.0.0
 │       ├── observability/
-│       │   ├── telemetry.ts                # W3C traceparent & OTel Spans
-│       │   └── otlp-exporter.ts            # OpenTelemetry OTLP/HTTP Exporter
+│       │   ├── telemetry.ts                # AgentTracer, W3C traceparent (Zero DB leaks)
+│       │   └── otlp-exporter.ts            # Bounded BatchSpanProcessor & OTLP HTTP Exporter
 │       ├── ai/
 │       │   ├── eval-runner.ts              # AI Benchmark Evaluation Runner
 │       │   ├── eval-regression.ts          # AI Regression Detection Engine
@@ -560,12 +631,14 @@ Agentic-Travel-Operations/
 │           ├── client.ts                   # Browser Client with Realtime Subscription
 │           └── server.ts                   # Authenticated Server Client with Tenant Forwarding
 └── tests/
+    ├── architecture/
+    │   └── hexagonal-boundaries.test.ts    # Automated AST Domain & Application Boundary Enforcement
     ├── domain/
     │   ├── property-based-invariants.test.ts # 100+ Random Permutation Invariant Verification
     │   ├── outbox-worker.test.ts           # Backoff, Jitter, Leases & DLQ Tests
     │   ├── prompt-versioning.test.ts       # Versioned Prompt Registry Tests
     │   ├── domain-authorization.test.ts    # Multi-Tenant & Supplier Ownership Tests
-    │   ├── telemetry.test.ts               # W3C traceparent & OTel Span Serializer Tests
+    │   ├── telemetry.test.ts               # Injected AuditLogPort & OTel Serializer Tests
     │   └── invariants.test.ts              # TimeSlot & Timeline Invariant Tests
     ├── chaos/
     │   ├── load-resilience.test.ts         # 50 Concurrent Requests, Replays & Timeout Tests
@@ -574,7 +647,8 @@ Agentic-Travel-Operations/
     │   ├── ai-eval.test.ts                 # Full AI Benchmark Evaluation & Regression Tests
     │   └── evaluation-dataset.ts           # Ground-Truth Benchmark Dataset (v1.2.0)
     ├── integration/
-    │   └── pipeline-integration.test.ts    # Application Service & Adapters Integration Tests
+    │   ├── pipeline-integration.test.ts    # E2E Webhook-to-Outbox Pipeline Integration Tests
+    │   └── failure-modes.test.ts           # 6 Failure Scenarios (LLM Timeout, Network, OCC, Collector)
     ├── action-validator.test.ts            # Overlaps, Transit Buffers & Immutable Bookings
     ├── idempotency.test.ts                 # Distributed Lock & Retry State Machine
     ├── ssrf.test.ts                        # DNS Resolution & Private IP Blocking

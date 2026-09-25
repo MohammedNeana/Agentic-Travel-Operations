@@ -60,5 +60,25 @@
     },
     "passedGate": true,
     "regressions": []
+  },
+  {
+    "id": "eval-1790299689564",
+    "commitSha": "local-head",
+    "model": "llama-3.3-70b-versatile",
+    "promptVersion": "2.0.0",
+    "datasetVersion": "1.2.0",
+    "timestamp": "2026-09-25T01:28:09.564Z",
+    "metrics": {
+      "totalScenarios": 22,
+      "passedCount": 22,
+      "failedCount": 0,
+      "intentAccuracyPercentage": 100,
+      "disambiguationPrecisionPercentage": 100,
+      "injectionBlockRatePercentage": 100,
+      "meanLatencyMs": 0,
+      "p95LatencyMs": 1
+    },
+    "passedGate": true,
+    "regressions": []
   }
 ]
